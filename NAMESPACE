@@ -1,0 +1,4 @@
+import(data.table)
+import(xml2)
+
+exportPattern("^[[:alpha:]]+")
