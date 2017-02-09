@@ -1,3 +1,4 @@
+import(magrittr)
 import(data.table)
 import(xml2)
 import(XML)
