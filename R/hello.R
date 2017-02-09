@@ -3,16 +3,18 @@
 library(compiler)
 compilePKGS(T)
 
-read.mq.file <- function(mq.files, cl) {
+
+
+read.mq.file <- function(mq.files, cluster) {
   # ''' read mq files (V) '''
   # @param mq.files: MetaQuote files.
   # @return:
   # 2017-02-05: Version 0.1
   mq.names <- mq.file.name(mq.files)
-  if (missing(cl) || length(mq.files) < 4) {
+  if (missing(cluster) || length(mq.files) < 4) {
     mapply(fetch.file.data, mq.files, mq.names)
   } else (
-    clusterMap(cl, fetch.file.data, mq.files, mq.names)
+    clusterMap(cluster, fetch.file.data, mq.files, mq.names)
   )
   
   # fetch.file.data(mq.files, mq.names)
@@ -94,6 +96,7 @@ fetch.html.data <- function(mq.file) {
   # return(NULL)
 }
 
+#### FETCH INFOS ####
 fetch.html.data.infos.mt4ea <- function(mq.file.parse) {
   
   head.lines <- xml_text(xml_find_all(mq.file.parse, '//b')[2:3])
@@ -290,8 +293,9 @@ format.time.numeric.to.posixct <- function(time) {
 
 
 #### FETCH TICKETS ####
-fetch.html.data.tickets.mt4ea <- function(mq.file) {
-  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2)
+fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse) {
+  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2,
+                         colClasses = c(rep('character', 3), rep('integer', 7)))
   # 
   # table.values <- xml_text(xml_find_all(xml_find_all(xml_find_all(mq.file.parse, '//table')[2], './/tr'), './/td'))
   # colspan <- as.numeric(xml_attr(xml_find_all(xml_find_all(mq.file.parse, '//table')[2], './/td'), 'colspan'))
