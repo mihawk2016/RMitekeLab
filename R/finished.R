@@ -114,7 +114,7 @@ format.infos.account <- function(account) {
   if (is.character(account)) {
     account <- gsub('Account: ', '', account)
     match1 <- regexpr('[[:digit:]]*', account)
-    if (match1 > 0) {
+    if (match1) {
       account <- substr(account, match1, attr(match1, 'match.length') + match1 - 1)
     }
     return(as.numeric(account))
@@ -148,7 +148,7 @@ format.infos.currency <- function(currency) {
   }
   currency <- gsub('Currency: ', '', currency)
   match1 <- regexpr('[[:upper:]]+', currency)
-  if (match1 > 0) {
+  if (match1) {
     currency <- substr(currency, match1, attr(match1, 'match.length') + match1 - 1)
   }
   ifelse(currency == '', NA, currency)
@@ -165,7 +165,7 @@ format.infos.leverage <- function(leverage) {
   }
   if (is.character(leverage)) {
     match1 <- regexpr('1:[[:digit:]]+', leverage)
-    if (match1 > 0) {
+    if (match1) {
       leverage <- substr(leverage, match1 + 2, attr(match1, 'match.length') + match1 - 1)
     }
     return(as.numeric(leverage))

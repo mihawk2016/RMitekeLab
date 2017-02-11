@@ -35,14 +35,14 @@ build.tickets = function(table, group, columns=TICKETS.COLUMNS[[group]], uniform
   # 2017-01-21: Version 1.0 change logic expr to || short way connection
   # 2017-01-17: Version 0.2 add Comment
   # 2017-01-17: Version 0.1
-  if (is.null(table) || nrow(table) == 0) {
+  if (is.null(table) || !nrow(table)) {
     return(NULL) 
   }
   table.columns <- colnames(table)
   table[, GROUP := group]
   ## default 0 check
   zero.columns <- columns[!(columns %in% table.columns)]
-  if (length(zero.columns) > 0) {
+  if (length(zero.columns)) {
     table[, (zero.columns) := list(0)]
   }
   ## comment
@@ -55,7 +55,7 @@ build.tickets = function(table, group, columns=TICKETS.COLUMNS[[group]], uniform
   table <- table[, (group.columns), with = FALSE]
   ## NAs check
   na.columns <- uniform.columns[!uniform.columns %in% group.columns]
-  if (length(na.columns) > 0) {
+  if (length(na.columns)) {
     table[, (na.columns) := list(NA)]
   }
   table
