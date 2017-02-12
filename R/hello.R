@@ -7,29 +7,23 @@ read.mq.file <- function(mq.files, cluster) {
   # ''' read mq files (V) '''
   # @param mq.files: MetaQuote files.
   # @return:
+  # 2017-02-12: Version 0.3 fix file path for input mode
   # 2017-02-07: Version 0.2 parallel
   # 2017-02-05: Version 0.1
-  mq.names <-# mq.file.name(mq.files)
-    mq.files %>%
-    (function(mq.files) {
-      if (is.data.frame(mq.files)) {
-        return(mq.files$name)
-      }
-      return(basename(mq.files))
-    })
+  if (is.data.frame(mq.files)) {
+    mq.files <- mq.files$datapath
+    mq.names <- mq.files$name
+  } else {
+    mq.names <- basename(mq.files)
+  }
   if (missing(cluster) || length(mq.files) < 4) {
     mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
   } else (
     clusterMap(cluster, fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
   )
-  
+  # closeAllConnections()
   # fetch.file.data(mq.files, mq.names)
 }
-
-# if (is.data.frame(mq.files)) {
-#   return(mq.files$name)
-# }
-# return(basename(mq.files))
 
 fetch.file.data <- function(mq.file, mq.file.name) {
   # ''' fetch mq file's data (S) '''
@@ -37,20 +31,24 @@ fetch.file.data <- function(mq.file, mq.file.name) {
   # @param mq.names: MetaQuote file-name.
   # @return: data of MetaQuote file.
   # 2017-02-05: Version 0.1
-  if (grepl('.(html|htm)$', mq.file.name)) {
-    data <- fetch.html.data(mq.file)
-  } else if (grepl('.(xlsx|xls)$', mq.file.name)) {
-    ## ToDo ####
-    data <- fetch.excel.data(mq.file, mq.file.name)
-  } else if (grepl('.(csv)$', mq.file.name)) {
-    ## ToDo ####
-    data <- fetch.csv.data(mq.file, mq.file.name)
+  data <-
+    if (grepl('.(html|htm)$', mq.file.name)) {
+      fetch.html.data(mq.file)
+    } else if (grepl('.(xlsx|xls)$', mq.file.name)) {
+      ## ToDo ####
+      fetch.excel.data(mq.file, mq.file.name)
+    } else if (grepl('.(csv)$', mq.file.name)) {
+      ## ToDo ####
+      fetch.csv.data(mq.file, mq.file.name)
+    } else {
+      NULL
+    }
+  if (is.null(data)) {
+    append.to.mismatch(mq.file.name)
   } else {
-    data <- NULL
+    set.infos.path(mq.file)
+    set.infos.file(mq.file.name)
   }
-  data
-  
-  ## ToDo ####
 }
 
 
@@ -60,32 +58,48 @@ fetch.html.data <- function(mq.file) {
   # @param mq.names: MetaQuote file-name.
   # @return: data of MetaQuote file.
   # 2017-02-05: Version 0.1
-  parse <- tryCatch(
-    read_html(mq.file, encoding = 'GBK'),
-    error = function(e) read_html(mq.file, encoding = 'UTF-8')
-  )
-  title <- xml_text(xml_find_first(parse, '//title'))
-  # infos <-
+  title <-
+    tryCatch(
+      readLines(file(mq.file, encoding = 'UTF-8'), 4, ok = FALSE, warn = FALSE),
+      error = function(e) readLines(file(mq.file, encoding = 'UTF-16'), 4, ok = FALSE, warn = FALSE)
+    ) %>%
+    extract((.) %>%
+              str_detect('<title>') %>%
+              which) %>%
+    read_html() %>%
+    xml_find_first('.//title') %>%
+    xml_text
   if (grepl('Strategy Tester:', title)) {
-    infos <- fetch.html.data.infos.mt4ea(parse)
+    read_html(mq.file, encoding = 'GBK') %T>%
+      fetch.html.data.infos.mt4ea %>%
+      append.to.html.parse
     # tickets <- fetch.html.data.tickets.mt4ea(mq.file)
   } else if (grepl('Statement:', title)) {
-    infos <- fetch.html.data.infos.mt4trade(parse)
+    read_html(mq.file, encoding = 'GBK') %T>%
+      fetch.html.data.infos.mt4trade %>%
+      append.to.html.parse
     # tickets <- fetch.html.data.tickets.mt4trade(mq.file)
   } else if (grepl('Strategy Tester Report', title)) {
-    infos <- fetch.html.data.infos.mt5ea(parse)
+    read_html(mq.file, encoding = 'UTF-16') %T>%
+      fetch.html.data.infos.mt5ea %>%
+      append.to.html.parse
     # tickets <- fetch.html.data.tickets.mt5ea(mq.file)
   } else if (grepl('Trade History Report', title)) {
-    infos <- fetch.html.data.infos.mt5trade(parse)
+    read_html(mq.file, encoding = 'UTF-16') %T>%
+      fetch.html.data.infos.mt5trade %>%
+      append.to.html.parse
     # tickets <- fetch.html.data.tickets.mt5trade(mq.file)
   } else if (grepl('Closed Trades Report', title)) {
-    infos <- fetch.html.data.infos.mt4m_closed(parse)
+    fetch.html.data.infos.mt4m_closed()
+    append.to.html.parse('NEEDLESS')
     # tickets <- fetch.html.data.tickets.mt4m_closed(mq.file)
   } else if (grepl('Raw Report', title)) {
-    infos <- fetch.html.data.infos.mt4m_raw(parse)
+    fetch.html.data.infos.mt4m_raw()
+    append.to.html.parse('NEEDLESS')
     # tickets <- fetch.html.data.tickets.mt4m_raw(mq.file)
+  } else {
+    return(NULL)
   }
-  # return(NULL)
 }
 
 #### FETCH TICKETS ####

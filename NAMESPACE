@@ -1,6 +1,7 @@
 import(magrittr)
-import(data.table)
 import(lubridate)
+import(data.table)
+import(stringr)
 import(xml2)
 import(XML)
 

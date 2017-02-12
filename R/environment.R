@@ -8,4 +8,8 @@ compilePKGS(T)
 #### ENVIRONMENT ####
 METAQUOTE.ANALYSTIC <- new.env()
 assign('INFOS', list(), envir = METAQUOTE.ANALYSTIC)
+assign('html.parse', list(), envir = METAQUOTE.ANALYSTIC)
+assign('MISMATCH', c(), envir = METAQUOTE.ANALYSTIC)
+assign('TICKETS.RAW', list(), envir = METAQUOTE.ANALYSTIC)
+assign('TICKETS.TEMP', list(), envir = METAQUOTE.ANALYSTIC)
 
