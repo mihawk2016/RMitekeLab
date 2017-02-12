@@ -9,7 +9,14 @@ read.mq.file <- function(mq.files, cluster) {
   # @return:
   # 2017-02-07: Version 0.2 parallel
   # 2017-02-05: Version 0.1
-  mq.names <- mq.file.name(mq.files)
+  mq.names <-# mq.file.name(mq.files)
+    mq.files %>%
+    (function(mq.files) {
+      if (is.data.frame(mq.files)) {
+        return(mq.files$name)
+      }
+      return(basename(mq.files))
+    })
   if (missing(cluster) || length(mq.files) < 4) {
     mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
   } else (
@@ -18,6 +25,11 @@ read.mq.file <- function(mq.files, cluster) {
   
   # fetch.file.data(mq.files, mq.names)
 }
+
+# if (is.data.frame(mq.files)) {
+#   return(mq.files$name)
+# }
+# return(basename(mq.files))
 
 fetch.file.data <- function(mq.file, mq.file.name) {
   # ''' fetch mq file's data (S) '''
@@ -56,28 +68,22 @@ fetch.html.data <- function(mq.file) {
   # infos <-
   if (grepl('Strategy Tester:', title)) {
     infos <- fetch.html.data.infos.mt4ea(parse)
-    tickets <- fetch.html.data.tickets.mt4ea(mq.file)
-    # return(MetaQuote.HTML.MT4EA.Report$new(file.path, file.name, html.parse))
+    # tickets <- fetch.html.data.tickets.mt4ea(mq.file)
   } else if (grepl('Statement:', title)) {
     infos <- fetch.html.data.infos.mt4trade(parse)
-    tickets <- fetch.html.data.tickets.mt4trade(mq.file)
-    # return(MetaQuote.HTML.MT4Trade.Report$new(file.path, file.name, html.parse))
+    # tickets <- fetch.html.data.tickets.mt4trade(mq.file)
   } else if (grepl('Strategy Tester Report', title)) {
     infos <- fetch.html.data.infos.mt5ea(parse)
-    tickets <- fetch.html.data.tickets.mt5ea(mq.file)
-    # return(MetaQuote.HTML.MT5EA.Report$new(file.path, file.name, html.parse))
+    # tickets <- fetch.html.data.tickets.mt5ea(mq.file)
   } else if (grepl('Trade History Report', title)) {
     infos <- fetch.html.data.infos.mt5trade(parse)
-    tickets <- fetch.html.data.tickets.mt5trade(mq.file)
-    # return(MetaQuote.HTML.MT5Trade.Report$new(file.path, file.name, html.parse))
+    # tickets <- fetch.html.data.tickets.mt5trade(mq.file)
   } else if (grepl('Closed Trades Report', title)) {
     infos <- fetch.html.data.infos.mt4m_closed(parse)
-    tickets <- fetch.html.data.tickets.mt4m_closed(mq.file)
-    # return(MetaQuote.HTML.MT4M_Closed.Report$new(file.path, file.name))
+    # tickets <- fetch.html.data.tickets.mt4m_closed(mq.file)
   } else if (grepl('Raw Report', title)) {
     infos <- fetch.html.data.infos.mt4m_raw(parse)
-    tickets <- fetch.html.data.tickets.mt4m_raw(mq.file)
-    # return(MetaQuote.HTML.MT4M_Raw.Report$new(file.path, file.name))
+    # tickets <- fetch.html.data.tickets.mt4m_raw(mq.file)
   }
   # return(NULL)
 }

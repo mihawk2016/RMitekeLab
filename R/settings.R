@@ -1,4 +1,12 @@
-## 2017-02-10: Version 0.1
+library(compiler)
+compilePKGS(T)
+
+#### PATCH NOTE ####
+## 2017-02-12: Version 0.2 environment
+## 2017-02-05: Version 0.1
+
+
+
 
 #### SYMBOLS SETTING ####
 SYMBOLS.SETTING <-

@@ -1,20 +1,14 @@
-## 2017-02-05: Version 0.1
-
 library(compiler)
 compilePKGS(T)
 
-mq.file.name <- function(mq.files) {
-  # ''' get mq file names (V) '''
-  # @param mq.files: MetaQuote files.
-  # @return: names of MetaQuote files.
-  # 2017-02-07: Version 1.0
-  # 2017-02-06: Version 0.2 ifelse not good for this. is.data.frame or is.character return 1-length vector.
-  # 2017-02-05: Version 0.1
-  if (is.data.frame(mq.files)) {
-    return(mq.files$name)
-  }
-  return(basename(mq.files))
-} # FINISH
+#### PATCH NOTE ####
+## 2017-02-12: Version 0.2 environment
+## 2017-02-05: Version 0.1
+
+
+
+
+
 
 #### FETCH INFOS ####
 fetch.html.data.infos.mt4ea <- function(mq.file.parse) {
@@ -23,26 +17,22 @@ fetch.html.data.infos.mt4ea <- function(mq.file.parse) {
   first.table <- xml_find_first(mq.file.parse, '//table')
   time.string <- xml_text(xml_find_all(first.table, '//td')[4])
   nchar.time.string <- nchar(time.string)
-  build.infos(
-    type = 'MT4-EA',
-    name = head.lines[1],
-    broker = head.lines[2],
-    time = substr(time.string, nchar.time.string - 10, nchar.time.string - 1)
-  )
+  set.infos.type('MT4-EA')
+  set.infos.name(head.lines[1])
+  set.infos.broker(head.lines[2])
+  set.infos.time(substr(time.string, nchar.time.string - 10, nchar.time.string - 1))
 } # FINISH
 
 fetch.html.data.infos.mt4trade <- function(mq.file.parse) {
   
   first.row <- xml_text(xml_find_all(xml_find_first(xml_find_first(mq.file.parse, '//table'), './/tr'), './/b'))
-  build.infos(
-    type = 'MT4-Trade',
-    account = first.row[grep('Account', first.row)],
-    name = first.row[grep('Name', first.row)],
-    broker = xml_text(xml_find_first(mq.file.parse, '//b')),
-    currency = first.row[grep('Currency', first.row)],
-    leverage = first.row[grep('Leverage', first.row)],
-    time = tail(first.row, 1)
-  )
+  set.infos.type('MT4-Trade')
+  set.infos.account(first.row[grep('Account', first.row)])
+  set.infos.name(first.row[grep('Name', first.row)])
+  set.infos.broker(xml_text(xml_find_first(mq.file.parse, '//b')))
+  set.infos.currency(first.row[grep('Currency', first.row)])
+  set.infos.leverage(first.row[grep('Leverage', first.row)])
+  set.infos.time(tail(first.row, 1))
 } # FINISH
 
 fetch.html.data.infos.mt5ea <- function(mq.file.parse) {
@@ -50,163 +40,32 @@ fetch.html.data.infos.mt5ea <- function(mq.file.parse) {
   table.values <- xml_text(xml_find_all(xml_find_first(mq.file.parse, '//table'), './/td'))
   time.string <- table.values[grep('Period:', table.values) + 1]
   nchar.time.string <- nchar(time.string)
-  build.infos(
-    type = 'MT5-EA',
-    name = table.values[grep('Expert:', table.values) + 1],
-    broker = table.values[grep('Broker:', table.values) + 1],
-    currency = table.values[grep('Currency:', table.values) + 1],
-    leverage = table.values[grep('Leverage:', table.values) + 1],
-    time = substr(time.string, nchar.time.string - 10, nchar.time.string - 1)
-  )
+  set.infos.type('MT5-EA')
+  set.infos.name(table.values[grep('Expert:', table.values) + 1])
+  set.infos.broker(table.values[grep('Broker:', table.values) + 1])
+  set.infos.currency(table.values[grep('Currency:', table.values) + 1])
+  set.infos.leverage(table.values[grep('Leverage:', table.values) + 1])
+  set.infos.time(substr(time.string, nchar.time.string - 10, nchar.time.string - 1))
 } # FINISH
 
 fetch.html.data.infos.mt5trade <- function(mq.file.parse) {
   
   table.values <- xml_text(xml_find_all(xml_find_first(mq.file.parse, '//table'), './/th'))
   account.currency.leverage <- table.values[grep('Account:', table.values) + 1]
-  build.infos(
-    type = 'MT5-Trade',
-    account = account.currency.leverage,
-    name = table.values[grep('Name:', table.values) + 1],
-    broker = table.values[grep('Broker:', table.values) + 1],
-    currency = account.currency.leverage,
-    leverage = account.currency.leverage,
-    time = format.infos.time(table.values[grep('Date:', table.values) + 1]) - 8 * 3600
-  )
+  set.infos.type('MT5-Trade')
+  set.infos.account(account.currency.leverage)
+  set.infos.name(table.values[grep('Name:', table.values) + 1])
+  set.infos.broker(table.values[grep('Broker:', table.values) + 1])
+  set.infos.currency(account.currency.leverage)
+  set.infos.leverage(account.currency.leverage)
+  set.infos.time(format.infos.time(table.values[grep('Date:', table.values) + 1]) - 8 * 3600)
 } # FINISH
 
 fetch.html.data.infos.mt4m_closed <- function(mq.file.parse) {
-  build.infos(
-    type = 'MT4M-Closed'
-  )
+  set.infos.type('MT4M-Closed')
 } # FINISH
 
 fetch.html.data.infos.mt4m_raw <- function(mq.file.parse) {
-  build.infos(
-    type = 'MT4M-Raw'
-  )
+  set.infos.type('MT4M-Raw')
 } # FINISH
 
-#### INFOS BUILDER ####
-build.infos <- function(file=NA, type=NA, account=NA, name=NA, broker=NA, currency=NA, leverage=NA, time=NA) {
-  
-  data.frame(
-    stringsAsFactors = F,
-    row.names = NULL,
-    File = file,
-    Type = type,
-    Account = format.infos.account(account),
-    Name = format.infos.name(name),
-    Broker = format.infos.broker(broker),
-    Currency = format.infos.currency(currency),
-    Leverage = format.infos.leverage(leverage),
-    Time = format.infos.time(time)
-  )
-} # FINISH
-
-format.infos.account <- function(account) {
-  if (is.na(account) || is.numeric(account)) {
-    return(account)
-  }
-  if (account == '') {
-    return(NA)
-  }
-  if (is.character(account)) {
-    account <- gsub('Account: ', '', account)
-    match1 <- regexpr('[[:digit:]]*', account)
-    if (match1) {
-      account <- substr(account, match1, attr(match1, 'match.length') + match1 - 1)
-    }
-    return(as.numeric(account))
-  }
-  NA
-}
-format.infos.name <- function(name) {
-  # ''' format report info: name '''
-  # 2017-01-16: Version 0.1
-  if (is.na(name)) {
-    return(name)
-  }
-  name <- gsub('Name: ', '', name)
-  ifelse(name == '', NA, name)
-} # FINISH
-
-format.infos.broker <- function(broker) {
-  # ''' format report info: broker '''
-  # 2017-01-16: Version 0.1
-  if (is.na(broker)) {
-    return(broker)
-  }
-  gsub(' .*', '', broker)
-} # FINISH
-
-format.infos.currency <- function(currency) {
-  # ''' format report info: currency '''
-  # 2017-01-16: Version 0.1
-  if (is.na(currency)) {
-    return(currency)
-  }
-  currency <- gsub('Currency: ', '', currency)
-  match1 <- regexpr('[[:upper:]]+', currency)
-  if (match1) {
-    currency <- substr(currency, match1, attr(match1, 'match.length') + match1 - 1)
-  }
-  ifelse(currency == '', NA, currency)
-} # FINISH
-
-format.infos.leverage <- function(leverage) {
-  # ''' format report info: leverage '''
-  # 2017-01-16: Version 0.1
-  if (is.na(leverage) | is.numeric(leverage)) {
-    return(leverage)
-  }
-  if (leverage == '') {
-    return(NA)
-  }
-  if (is.character(leverage)) {
-    match1 <- regexpr('1:[[:digit:]]+', leverage)
-    if (match1) {
-      leverage <- substr(leverage, match1 + 2, attr(match1, 'match.length') + match1 - 1)
-    }
-    return(as.numeric(leverage))
-  }
-  NA
-} # FINISH
-
-format.infos.time <- function(time) {
-  # ''' format report info: time '''
-  # 2017-01-16: Version 0.1
-  format.time.all.to.numeric(time)
-} # FINISH
-
-format.time.all.to.numeric <- function(time) {
-  if (is.na(time) || is.numeric(time)) {
-    return(time)
-  }
-  if (is.character(time)) {
-    if (grepl(',', time)) {
-      time <- format.mt4trade.infos.time(time)
-    } else {
-      time <- gsub('-', '.', time)
-      format <- '%Y.%m.%d %H:%M:%S'
-      sub_format <- substr(format, 1, nchar(time) - 2)
-      time <- as.POSIXct(time, format = sub_format, tz = 'GMT')
-    }
-    return(as.numeric(time))
-  }
-  NA
-} # FINISH
-
-format.mt4trade.infos.time <- function(time) {
-  # ''' format mt4trade info time '''
-  # 2016-08-16: Done
-  local_time <- Sys.getlocale('LC_TIME')
-  Sys.setlocale('LC_TIME', 'us')
-  new_time <- as.POSIXct(time, '%Y %b %d, %H:%M', tz = 'GMT')
-  Sys.setlocale('LC_TIME', local_time)
-  new_time
-} # FINISH
-
-format.time.numeric.to.posixct <- function(time) {
-  as.POSIXct(time, origin = '1970-01-01', tz = 'GMT')
-} # FINISH
