@@ -4,7 +4,7 @@ import(data.table)
 import(stringr)
 import(xml2)
 importFrom(XML, readHTMLTable)
-importFrom(lubridate, ymd_hm)
+importFrom(lubridate, ymd_hms, ymd_hm, ymd)
 
 
 exportPattern("^[[:alpha:]]+")

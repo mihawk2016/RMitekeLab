@@ -145,7 +145,10 @@ mysql.query <- function(sql, host=MYSQL.SETTING$HOST, port=MYSQL.SETTING$PORT,
 mysql.price.open <- function(symbol, time, timeframe='M1') {
   # ''' get open data from mysql database '''
   # 2017-01-22: Version 1.0
-  table <- tolower(paste(symbol, timeframe, sep = '_'))
+  table <-
+    paste(symbol, timeframe, sep = '_') %>%
+    tolower
+  
   time.time <- .format.time(time)
   
   max.time <- max(time.time)
@@ -177,7 +180,10 @@ mysql.price.open <- function(symbol, time, timeframe='M1') {
 mysql.price.ohlc <- function(symbol, from, to, timeframe='M1') {
   # ''' get ohlc from mysql database '''
   # 2017-01-22: Version 1.0
-  table <- tolower(paste(symbol, timeframe, sep = '_'))
+  table <-
+    paste(symbol, timeframe, sep = '_') %>%
+    tolower
+  
   
   from <- gsub('-', '.', as.character(as.Date(.format.time(from))))
   to <- gsub('-', '.', as.character(as.Date(.format.time(to)) + 1))

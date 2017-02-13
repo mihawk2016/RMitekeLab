@@ -32,17 +32,11 @@ get.tickets.temp <- function() {
   get('TICKETS.TEMP', envir = METAQUOTE.ANALYSTIC)
 }
 
-get.tickets.raw <- function(index) {
+get.tickets.raw <- function(index, get.open.fun, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   if (missing(index)) {
     index <- 1:length(get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC))
   }
-  lapply(index, fetch.tickets.raw)
-  
-  # tickets.raw <- get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC)
-  # if (!missing(index)) {
-  #   tickets.raw <- tickets.raw[index]
-  # }
-  # tickets.raw
+  lapply(index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
 }
 
 append.to.tickets.temp <- function(tickets) {
@@ -59,7 +53,7 @@ append.to.tickets.raw <- function(index) {
   METAQUOTE.ANALYSTIC$TICKETS.RAW[[index]] <- tickets
 }
 
-fetch.tickets.raw <- function(index) {
+fetch.tickets.raw <- function(index, get.open.fun, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   tickets.raw <- get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC)[[index]]
   if (!is.null(tickets.raw)) {
     return(tickets.raw)
@@ -70,20 +64,127 @@ fetch.tickets.raw <- function(index) {
   parse <- get.html.parse(index)[[1]]
   switch(
     type,
-    'MT4-EA' = NULL,
-    'MT4-Trade' = fetch.html.data.tickets.mt4trade(file, parse)
+    'MT4-EA' = fetch.html.data.tickets.mt4ea(file, parse, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+    'MT4-Trade' = fetch.html.data.tickets.mt4trade(file, parse),
+    'MT5-EA' = fetch.html.data.tickets.mt5ea(file),
+    'MT5-Trade' = fetch.html.data.tickets.mt5trade(file),
+    'MT4M-Closed' = fetch.html.data.tickets.mt4m_closed(file),
+    'MT4M-Raw' = fetch.html.data.tickets.mt4m_raw(file)
   )
   append.to.tickets.raw(index)
 }
+
 #### FETCH TICKETS ####
+fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, timeframe='M1',
+                                          currency, symbols.setting=SYMBOLS.SETTING) {
+  suppressWarnings({
+    table <-
+      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2,
+                    colClasses = c('character', colclasses.time.to.num, 'character', colclasses.num, colclasses.num,
+                                   colclasses.num, colclasses.num, colclasses.num, colclasses.num, 'character')) %>%
+      as.data.table %>%
+      set_colnames(c('deal', 'time', 'type', 'ticket', 'volume', 'price', 'sl', 'tp', 'profit', 'balance')) %>%
+      extract(type != 'modify', -c('deal', 'balance'))
+  })
+  xml.text <-
+    mq.file.parse %>%
+    xml_find_first('.//table') %>%
+    xml_find_all('.//td') %>%
+    xml_text
+  deposit <-
+    xml.text %>%
+    extract(24) %>%
+    as.numeric
+  time.string <- xml.text[4]
+  len.time.string <- nchar(time.string)
+  deposit.time <-
+    time.string %>%
+    substr(len.time.string - 23, len.time.string - 14) %>%
+    format.time.all.to.numeric
+  end.time <-
+    time.string %>%
+    substr(len.time.string - 10, len.time.string - 1) %>%
+    format.time.all.to.numeric
+  money.tickets <-
+    data.table(
+      TICKET = 0,
+      OTIME = deposit.time,
+      PROFIT = deposit
+    ) %>%
+    build.tickets('MONEY')
+  rows <- nrow(table)
+  if (!rows) {
+    return(money.tickets)
+  }
+  item <-
+    xml.text %>%
+    extract(2) %>%
+    gsub(' ([ \\(\\)[:alpha:]])*', '', .)
+  table.index <- 1:rows
+  table.types <- table[, type]
+  table.tickets <- table[, ticket]
+  pending.close.part.index <- which(table.types == 'delete')
+  if (length(pending.close.part.index) > 0) {
+    pending.tickets.ticket <- table.tickets[pending.close.part.index]
+    table.index %<>% setdiff(pending.close.part.index)
+    pending.open.part.index <- table.index[table.tickets[table.index] %in% pending.tickets.ticket]
+    table.index %<>% setdiff(pending.open.part.index)
+    merge(table[pending.open.part.index], table[pending.close.part.index], by = 'ticket') %>%
+      set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
+                     'CTIME', '', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
+      extract(j = (c('ITEM', 'COMMENT', 'TYPE')) := list(item, 'cancelled', toupper(TYPE))) %>%
+      # extract(j = TYPE := toupper(TYPE)) %>%
+      build.tickets('PENDING')
+  }
+  pending.of.closed.ticktets.index <- table.index[grepl('(buy|sell) (limit|stop)', table.types[table.index], ignore.case = TRUE)]
+  if (length(pending.of.closed.ticktets.index) > 0) {
+    table.index %<>% setdiff(pending.of.closed.ticktets.index)
+  }
+  if (length(table.index) > 0) {
+    closed.tickets.open.part.index <- table.index[grepl('(buy|sell)', table.types[table.index], ignore.case = TRUE)]
+    closed.tickets.close.part.index <- table.index %<>% setdiff(closed.tickets.open.part.index)
+    closed.tickets <- merge(table[closed.tickets.open.part.index], table[closed.tickets.close.part.index], by = 'ticket')
+    part.closed.index <- which(closed.tickets[, volume.x != volume.y])
+    if (length(part.closed.index) > 0) {
+      closed.tickets[part.closed.index, volume.x := volume.y]
+      closed.tickets[part.closed.index + 1, time.x := NA]
+      closed.tickets[, time.x := na.locf(time.x)]
+    }
+    closed.tickets %<>%
+      set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
+                     'CTIME', 'COMMENT', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
+      # extract(j = TYPE := toupper(TYPE)) %>%
+      extract(j = c('ITEM', 'TYPE') := list(item, toupper(TYPE))) %>%
+      extract(CTIME >= end.time - 60 & COMMENT == 'close at stop', EXIT := paste(COMMENT, 'so', sep = ' / '))
+    symbol <- item.to.symbol(item)
+    if (!is.na(symbol)) {
+      if (is.na(currency)) {
+        currency <- DEFAULT.CURRENCY
+      }
+      closed.tickets[, c('SWAP', 'PROFIT') := {
+        pips <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
+        tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, timeframe, currency, symbols.setting)
+        new.profit <- cal.profits(VOLUME, tickvalue, pips)
+        list(PROFIT - new.profit, new.profit)
+      }]
+    }
+    build.tickets(closed.tickets, 'CLOSED')
+  }
+}
 
 fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
-  
-  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1) %>%
-    as.data.table
+  suppressWarnings({
+    table <-
+      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
+                    colClasses = c('numeric', colclasses.time.to.num, toupper, colclasses.num, toupper,
+                                   colclasses.num, colclasses.num, colclasses.num, colclasses.time.to.num,
+                                   colclasses.num, colclasses.num, colclasses.num, colclasses.num, colclasses.num)) %>%
+      as.data.table
+  })
   ticket.index <-
     table[j = V1] %>%
-    str_detect('[:digit:]') %>%
+    is.na %>%
+    not %>%
     which
   if (!length(ticket.index)) {
     return(NULL)
@@ -98,26 +199,68 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
               extract(ticket.index)) %>%
     set_colnames(TICKETS.COLUMNS$UNIFORM[1:15]) %>%
     setkey(CTIME) %>%
-    extract('', CTIME := NA_character_) %>%
     extract(j = NAs := rowSums(is.na(.))) %>%
     setkey(NAs)
-  money.tickets <-
-    table[NAs == 9] %>%
-    extract(j = PROFIT := ITEM) %>%
+  table[NAs == 10] %>%
+    extract(j = PROFIT := colclasses.num(ITEM)) %>%
     extract(j = .(TICKET, OTIME, PROFIT, COMMENT)) %>%
     build.tickets('MONEY')
-  closed.tickets <-
-    table[NAs == 0] %>%
+  table[NAs == 0] %>%
     build.tickets('CLOSED')
-  open.tickets <-
-    table[NAs == 1] %>%
+  table[NAs == 1] %>%
     build.tickets('OPEN')
-  pending.tickets <-
-    table[NAs == 3] %>%
+  table[NAs == 4] %>%
     build.tickets('PENDING')
-  working.tickets <-
-    table[NAs == 4] %>%
+  table[NAs == 5] %>%
     build.tickets('WORKING')
+}
+
+fetch.html.data.tickets.mt5ea <- function(mq.file) {
+  
+  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 2,
+                         colClasses = c('character', 'numeric', rep('character', 3), rep('numeric', 7), 'character')) #%>%
+  
+}
+
+fetch.html.data.tickets.mt5trade <- function(mq.file) {
+  
+  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1)
+  
+}
+
+fetch.html.data.tickets.mt4m_closed <- function(mq.file) {
+  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
+                         colClasses = c('numeric', rep('character', 2), colclasses.time.to.num, toupper, toupper,
+                                        colclasses.num, colclasses.num, colclasses.time.to.num, colclasses.num, colclasses.num,
+                                        colclasses.num, colclasses.num, colclasses.num, colclasses.num, colclasses.num, 'character')) %>%
+    extract(i = 2:(nrow(.) - 1))
+  
+}
+
+fetch.html.data.tickets.mt4m_raw <- function(mq.file) {
+  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
+                         colClasses = c(rep('character', 23)))
+  
+}
+
+
+
+#### FORMAT COLCLASSES ####
+colclasses.time.to.num <- function(time.char) {
+  # new.time <- vector('numeric', length(time.char))
+  new.time <- rep(NA, length(time.char))
+  len <- nchar(time.char)
+  index.19 <- which(len == 19)
+  index.16 <- which(len == 16)
+  index.10 <- which(len == 10)
+  new.time[index.19] <- ymd_hms(time.char[index.19], tz = 'GMT')
+  new.time[index.16] <- ymd_hm(time.char[index.16], tz = 'GMT')
+  new.time[index.10] <- ymd(time.char[index.10], tz = 'GMT')
+  as.numeric(new.time)
+}
+
+colclasses.num <- function(num.char) {
+  as.numeric(gsub(' ', '', num.char))
 }
 
 #### BUILD TICKETS ####
@@ -260,14 +403,14 @@ item.to.symbol <- function(item, support.symbols=SUPPORT.SYMBOLS) {
   # ''' item to symbol '''
   
   if (is.na(item) || item == '' || grepl('^BX', item, ignore.case = TRUE)) {
-    return('') 
+    return(NA) 
   }
   support.symbols %>%
     extract(support.symbols %>% str_detect(item)) %>% {
       if (length(.) == 1) {
         .
       } else {
-        ''
+        NA
       }
     }
 }
