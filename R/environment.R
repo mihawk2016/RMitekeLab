@@ -13,3 +13,4 @@ assign('MISMATCH', c(), envir = METAQUOTE.ANALYSTIC)
 assign('TICKETS.RAW', list(), envir = METAQUOTE.ANALYSTIC)
 assign('TICKETS.TEMP', list(), envir = METAQUOTE.ANALYSTIC)
 
+assign('LOCAL.DATA', NULL, envir = METAQUOTE.ANALYSTIC)
