@@ -1,8 +1,10 @@
 import(magrittr)
-import(lubridate)
+# import(lubridate)
 import(data.table)
 import(stringr)
 import(xml2)
-import(XML)
+importFrom(XML, readHTMLTable)
+importFrom(lubridate, ymd_hm)
+
 
 exportPattern("^[[:alpha:]]+")
