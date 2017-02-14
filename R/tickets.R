@@ -80,8 +80,8 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
   suppressWarnings({
     table <-
       readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2,
-                    colClasses = c('character', colclasses.time.to.num, 'character', colclasses.num, colclasses.num,
-                                   colclasses.num, colclasses.num, colclasses.num, colclasses.num, 'character')) %>%
+                    colClasses = c('character', time.char.to.num, 'character', num.char.to.num, num.char.to.num,
+                                   num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character')) %>%
       as.data.table %>%
       set_colnames(c('deal', 'time', 'type', 'ticket', 'volume', 'price', 'sl', 'tp', 'profit', 'balance')) %>%
       extract(type != 'modify', -c('deal', 'balance'))
@@ -176,9 +176,9 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
   suppressWarnings({
     table <-
       readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
-                    colClasses = c('numeric', colclasses.time.to.num, toupper, colclasses.num, toupper,
-                                   colclasses.num, colclasses.num, colclasses.num, colclasses.time.to.num,
-                                   colclasses.num, colclasses.num, colclasses.num, colclasses.num, colclasses.num)) %>%
+                    colClasses = c('numeric', time.char.to.num, toupper, num.char.to.num, toupper,
+                                   num.char.to.num, num.char.to.num, num.char.to.num, time.char.to.num,
+                                   num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num)) %>%
       as.data.table
   })
   ticket.index <-
@@ -202,7 +202,7 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
     extract(j = NAs := rowSums(is.na(.))) %>%
     setkey(NAs)
   table[NAs == 10] %>%
-    extract(j = PROFIT := colclasses.num(ITEM)) %>%
+    extract(j = PROFIT := num.char.to.num(ITEM)) %>%
     extract(j = .(TICKET, OTIME, PROFIT, COMMENT)) %>%
     build.tickets('MONEY')
   table[NAs == 0] %>%
@@ -216,38 +216,69 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
 }
 
 fetch.html.data.tickets.mt5ea <- function(mq.file) {
+  suppressWarnings({
+    table <-
+      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 2,
+                    colClasses = c('character', 'numeric', rep('character', 3), rep('numeric', 7), 'character')) #%>%
+  })
   
-  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 2,
-                         colClasses = c('character', 'numeric', rep('character', 3), rep('numeric', 7), 'character')) #%>%
   
 }
 
 fetch.html.data.tickets.mt5trade <- function(mq.file) {
+  suppressWarnings({
+    table <-
+      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1)
+    
+  })
   
-  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1)
   
 }
 
 fetch.html.data.tickets.mt4m_closed <- function(mq.file) {
-  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
-                         colClasses = c('numeric', rep('character', 2), colclasses.time.to.num, toupper, toupper,
-                                        colclasses.num, colclasses.num, colclasses.time.to.num, colclasses.num, colclasses.num,
-                                        colclasses.num, colclasses.num, colclasses.num, colclasses.num, colclasses.num, 'character')) %>%
-    extract(i = 2:(nrow(.) - 1))
-  
-}
+  suppressWarnings({
+    table <-
+      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
+                    colClasses = c('numeric', rep('character', 2), time.char.to.num, toupper, toupper,
+                                   num.char.to.num, num.char.to.num, time.char.to.num, num.char.to.num, num.char.to.num,
+                                   num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character')) %>%
+      as.data.table %>%
+      extract(j = c('V2', 'V3', 'V13', 'V16', 'V17') := list(NULL, NULL, NULL, NULL, paste(V17, V2, sep = ' | '))) %>%
+      extract(i = 2:(nrow(.) - 1)) %>%
+      set_colnames(c('TICKET', 'OTIME', 'TYPE', 'ITEM', 'VOLUME', 'OPRICE', 'CTIME',
+                     'CPRICE', 'COMMISSION', 'TAXES', 'SWAP', 'PROFIT', 'COMMENT')) %>%
+      build.tickets('CLOSED')
+  })
+} # FINISH
 
 fetch.html.data.tickets.mt4m_raw <- function(mq.file) {
-  table <- readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
-                         colClasses = c(rep('character', 23)))
-  
+  suppressWarnings({
+    table <-
+      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
+                    colClasses = c('numeric', 'character', time.char.to.num, toupper, toupper, num.char.to.num,
+                                   num.char.to.num, num.char.to.num, num.char.to.num, time.char.to.num, num.char.to.num,
+                                   rep('character', 6), num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num,
+                                   rep('character', 2))) %>%
+      as.data.table %>%
+      extract(j = c('V2', 'V12', 'V13', 'V14', 'V15', 'V16', 'V17', 'V22', 'V23') := 
+                list(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, paste(V23, V2, sep = ' | '))) %>%
+      extract(i = 2:(nrow(.) - 7)) %>%
+      set_colnames(c('TICKET', 'OTIME', 'TYPE', 'ITEM', 'VOLUME', 'SL', 'TP', 'OPRICE', 'CTIME',
+                     'CPRICE', 'COMMISSION', 'TAXES', 'SWAP', 'PROFIT', 'COMMENT')) %>%
+      setkey(TYPE)
+  })
+  table['BALANCE'] %>%
+    build.tickets('MONEY')
+  table[c('BUY LIMIT', 'BUY STOP', 'SELL LIMIT', 'SELL STOP')] %>%
+    build.tickets('PENDING')
+  table[c('BUY', 'SELL')] %>%
+    build.tickets('CLOSED')
 }
 
 
 
 #### FORMAT COLCLASSES ####
-colclasses.time.to.num <- function(time.char) {
-  # new.time <- vector('numeric', length(time.char))
+time.char.to.num <- function(time.char) {
   new.time <- rep(NA, length(time.char))
   len <- nchar(time.char)
   index.19 <- which(len == 19)
@@ -259,10 +290,14 @@ colclasses.time.to.num <- function(time.char) {
   as.numeric(new.time)
 }
 
-colclasses.num <- function(num.char) {
+num.char.to.num <- function(num.char) {
   as.numeric(gsub(' ', '', num.char))
 }
 
+# #### UTILS ####
+# bind.comment.and.login <- function(comment, login) {
+#   ifelse(comment == '' || is.na(comment), login, paste(comment, login, sep = ' | '))
+# }
 #### BUILD TICKETS ####
 build.tickets = function(table, group, columns=TICKETS.COLUMNS[[group]], uniform.columns=TICKETS.COLUMNS$UNIFORM) {
   # ''' build tickets '''
