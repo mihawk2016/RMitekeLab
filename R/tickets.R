@@ -221,12 +221,38 @@ fetch.html.data.tickets.mt5ea <- function(mq.file) {
                     colClasses = c('character', num.char.to.num, toupper, toupper, toupper, num.char.to.num,
                                    num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num,
                                    num.char.to.num, num.char.to.num, 'character')) %>%
-      as.data.table(key = V1)
+      as.data.table
   })
-    
+  blocks.index <-
+    table[, 1] %>%
+    table.blocks.index('Deals')
+  deals.table <-
+    table[blocks.index$Deals] %>%
+    set_colnames(c())
     
   
 }
+
+mt5.money_closed_open <- funtion(deals.table) {
+  
+}
+
+table.blocks.index <- function(column, blocks) {
+  space.index <- which(column == '')
+  lapply(blocks, function(block) {
+    block.index <- which(column == block)
+    if (!length(block.index)) {
+      return(NULL)
+    }
+    block.index.begin <- block.index + 2
+    block.index.end <- space.index[which(space.index >= block.index.begin)[1]] - 1
+    if (block.index.end <= block.index.begin) {
+      return(NULL)
+    }
+    block.index.begin:block.index.end
+  }) %>%
+    set_names(blocks)
+} # FINISH
 
 fetch.html.data.tickets.mt5trade <- function(mq.file) {
   suppressWarnings({
