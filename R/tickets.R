@@ -220,18 +220,12 @@ fetch.html.data.tickets.mt5ea <- function(mq.file, get.open.fun, timeframe, curr
                   colClasses = c('character', num.char.to.num, toupper, toupper, toupper, num.char.to.num,
                                  num.char.to.num, num.char.to.num, rep('character', 5))) %>%
     as.data.table %>%
-    table.blocks(c('Orders', 'Deals'))
+    html.data.mt5.table.blocks(c('Orders', 'Deals'))
   blocks$Orders %>%
     html.data.mt5.pending
   blocks$Deals %>%
     html.data.mt5.money_closed_open(get.open.fun, timeframe, currency, symbols.setting)
-
-
 }
-
-
-# 'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
-# 'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
 
 fetch.html.data.tickets.mt5trade <- function(mq.file, get.open.fun, timeframe, currency, symbols.setting) {
   ## 13 columns 
@@ -240,7 +234,7 @@ fetch.html.data.tickets.mt5trade <- function(mq.file, get.open.fun, timeframe, c
                   colClasses = c('character', num.char.to.num, toupper, toupper, toupper, num.char.to.num,
                                  num.char.to.num, num.char.to.num, rep('character', 5))) %>%
     as.data.table %>%
-    table.blocks(c('Orders', 'Trade Positions', 'Working Orders', 'Deals'))
+    html.data.mt5.table.blocks(c('Orders', 'Trade Positions', 'Working Orders', 'Deals'))
   blocks$Orders %>%
     html.data.mt5.pending
   trade.positions <- blocks$`Trade Positions`
@@ -375,7 +369,7 @@ html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part, cp
   }
 }
   
-table.blocks <- function(table, blocks) {
+html.data.mt5.table.blocks <- function(table, blocks) {
   column <- unlist(table[, 1])
   table[, 1 := time.char.to.num(column)]
   space.index <- which(column == '')
@@ -393,25 +387,6 @@ table.blocks <- function(table, blocks) {
   }) %>%
     set_names(blocks)
 } # FINISH
-
-# table.blocks.index <- function(column, blocks) {
-#   space.index <- which(column == '')
-#   lapply(blocks, function(block) {
-#     block.index <- which(column == block)
-#     if (!length(block.index)) {
-#       return(NULL)
-#     }
-#     block.index.begin <- block.index + 2
-#     block.index.end <- space.index[which(space.index >= block.index.begin)[1]] - 1
-#     if (block.index.end <= block.index.begin) {
-#       return(NULL)
-#     }
-#     block.index.begin:block.index.end
-#   }) %>%
-#     set_names(blocks)
-# } # FINISH
-
-
 
 fetch.html.data.tickets.mt4m_closed <- function(mq.file) {
   readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
