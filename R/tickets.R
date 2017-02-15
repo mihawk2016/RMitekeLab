@@ -70,8 +70,8 @@ fetch.tickets.raw <- function(index, get.open.fun, timeframe='M1', symbols.setti
     type,
     'MT4-EA' = fetch.html.data.tickets.mt4ea(file, parse, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
     'MT4-Trade' = fetch.html.data.tickets.mt4trade(file, parse),
-    'MT5-EA' = fetch.html.data.tickets.mt5ea(file),
-    'MT5-Trade' = fetch.html.data.tickets.mt5trade(file),
+    'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+    'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
     'MT4M-Closed' = fetch.html.data.tickets.mt4m_closed(file),
     'MT4M-Raw' = fetch.html.data.tickets.mt4m_raw(file)
   )
@@ -126,7 +126,7 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
   table.types <- table[, type]
   table.tickets <- table[, ticket]
   pending.close.part.index <- which(table.types == 'delete')
-  if (length(pending.close.part.index) > 0) {
+  if (length(pending.close.part.index)) {
     pending.tickets.ticket <- table.tickets[pending.close.part.index]
     table.index %<>% setdiff(pending.close.part.index)
     pending.open.part.index <- table.index[table.tickets[table.index] %in% pending.tickets.ticket]
@@ -138,15 +138,15 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
       build.tickets('PENDING')
   }
   pending.of.closed.ticktets.index <- table.index[grepl('(buy|sell) (limit|stop)', table.types[table.index], ignore.case = TRUE)]
-  if (length(pending.of.closed.ticktets.index) > 0) {
+  if (length(pending.of.closed.ticktets.index) ) {
     table.index %<>% setdiff(pending.of.closed.ticktets.index)
   }
-  if (length(table.index) > 0) {
+  if (length(table.index)) {
     closed.tickets.open.part.index <- table.index[grepl('(buy|sell)', table.types[table.index], ignore.case = TRUE)]
     closed.tickets.close.part.index <- table.index %<>% setdiff(closed.tickets.open.part.index)
     closed.tickets <- merge(table[closed.tickets.open.part.index], table[closed.tickets.close.part.index], by = 'ticket')
     part.closed.index <- which(closed.tickets[, volume.x != volume.y])
-    if (length(part.closed.index) > 0) {
+    if (length(part.closed.index)) {
       closed.tickets[part.closed.index, volume.x := volume.y]
       closed.tickets[part.closed.index + 1, time.x := NA]
       closed.tickets[, time.x := na.locf(time.x)]
@@ -213,38 +213,49 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
     build.tickets('WORKING')
 } # FINISH
 
-fetch.html.data.tickets.mt5ea <- function(mq.file) {
+fetch.html.data.tickets.mt5ea <- function(mq.file, get.open.fun, timeframe, currency, symbols.setting) {
   ## 13 columns
-  table.blocks <-
+  blocks <-
     readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 2,
                   colClasses = c('character', num.char.to.num, toupper, toupper, toupper, num.char.to.num,
                                  num.char.to.num, num.char.to.num, rep('character', 5))) %>%
     as.data.table %>%
     table.blocks(c('Orders', 'Deals'))
-  orders.table <- table.blocks$Orders
-  if (!is.null(orders.table)) {
-    html.data.mt5.pending(orders.table)
-  }
-  deals.table <- table.blocks$Deals
-  if (!is.null(deals.table)) {
-    html.data.mt5.money_closed_open(deals.table)
-  }
+  blocks$Orders %>%
+    html.data.mt5.pending
+  blocks$Deals %>%
+    html.data.mt5.money_closed_open(get.open.fun, timeframe, currency, symbols.setting)
 
 
 }
 
-fetch.html.data.tickets.mt5trade <- function(mq.file) {
+
+# 'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+# 'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+
+fetch.html.data.tickets.mt5trade <- function(mq.file, get.open.fun, timeframe, currency, symbols.setting) {
   ## 13 columns 
-  table.blocks  <-
+  blocks  <-
     readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
                   colClasses = c('character', num.char.to.num, toupper, toupper, toupper, num.char.to.num,
                                  num.char.to.num, num.char.to.num, rep('character', 5))) %>%
     as.data.table %>%
-    table.blocks(c('Orders', 'Deals'))
-  orders.table <- table.blocks$Orders
-  if (!is.null(orders.table)) {
-    html.data.mt5.pending(orders.table)
-  }
+    table.blocks(c('Orders', 'Trade Positions', 'Working Orders', 'Deals'))
+  blocks$Orders %>%
+    html.data.mt5.pending
+  trade.positions <- blocks$`Trade Positions`
+  cprices <-
+    trade.positions[, V9] %>%
+    num.char.to.num %>%
+    set_names(trade.positions$V3)
+  blocks$`Working Orders` %>%
+    setnames(c(1:9, 11), c('OTIME', 'TICKET', 'ITEM', 'TYPE', 'VOLUME',
+                           'OPRICE', 'SL', 'TP', 'CPRICE', 'COMMENT')) %>%
+    extract(j = c('VOLUME', 'CPRICE') := list(as.numeric(gsub(' / .*', '', VOLUME)),
+                                              num.char.to.num(CPRICE))) %>%
+    build.tickets('WORKING')
+  blocks$Deals %>%
+    html.data.mt5.money_closed_open(get.open.fun, timeframe, currency, symbols.setting, cprices)
 }
 
 html.data.mt5.pending <- function(orders.table) {
@@ -255,20 +266,25 @@ html.data.mt5.pending <- function(orders.table) {
     extract(j = c('CTIME', 'VOLUME') := list(time.char.to.num(CTIME), as.numeric(gsub(' / .*', '', VOLUME)))) %>%
     extract(j = c('SL', 'TP') := list(ifelse(is.na(SL), 0, SL), ifelse(is.na(TP), 0, TP))) %>%
     build.tickets('PENDING')
-}
+} # FINISH
 
-html.data.mt5.money_closed_open <- function(deals.table) {
+html.data.mt5.money_closed_open <- function(deals.table, get.open.fun, timeframe,
+                                            currency, symbols.setting, cprices=NULL) {
   deals.table %<>%
     extract(j = c(2, 12) := NULL) %>%
     set_colnames(c('OTIME', 'ITEM', 'TYPE', 'direction', 'VOLUME', 'price', 'TICKET', 'COMMISSION',
                    'SWAP', 'PROFIT', 'COMMENT')) %>%
+    extract(j = c('COMMISSION', 'SWAP') := list(num.char.to.num(COMMISSION), num.char.to.num(SWAP))) %>%
     setkey(TYPE)
   deals.table['BALANCE'] %>%
     build.tickets('MONEY')
-  deals.table[!'BALANCE', html.data.mt5.symbol.closed_open(.SD, ITEM), by = ITEM]
+  deals.table[!'BALANCE',
+              html.data.mt5.symbol.closed_open(.SD, ITEM, cprices[ITEM], get.open.fun,
+                                               timeframe, currency, symbols.setting),
+              by = ITEM]
 }
 
-html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item) {
+html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item, cprice, get.open.fun, timeframe, currency, symbols.setting) {
   deals.no.money.table %<>% copy
   if (any('IN/OUT' %in% deals.no.money.table[, direction])) {
     deals.no.money.table %<>%
@@ -291,23 +307,31 @@ html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item) {
     setkey(direction)
   in.part <-
     deals.no.money.table['IN'] %>%
-    extract(j = c('COMMISSION', 'SWAP', 'PROFIT', 'direction') := NULL) %>%
+    extract(j = c('COMMISSION', 'SWAP', 'PROFIT', 'direction', 'ITEM') :=
+              list(NULL, NULL, NULL, NULL, item)) %>%
     setnames('price', 'OPRICE') %>%
     setkey(TYPE)
-  buy_in <- in.part['BUY']
-  sell_in <- in.part['SELL']
+  buy_in <- in.part['BUY', nomatch = 0]
+  sell_in <- in.part['SELL', nomatch = 0]
   out.part <-
     deals.no.money.table['OUT'] %>%
-    extract(j = c('direction', 'ITEM') := list(NULL, item)) %>%
+    extract(j = direction := NULL) %>%
     setnames(c('OTIME', 'price'), c('CTIME', 'CPRICE')) %>%
     setkey(TYPE)
   buy_out <- out.part['BUY']
   sell_out <- out.part['SELL']
-
-  html.data.mt5.symbol.closed_open.build.tickets(buy_in, sell_out)
+  if (nrow(buy_in)) {
+    html.data.mt5.symbol.closed_open.build.tickets(buy_in, sell_out, cprice, get.open.fun,
+                                                   timeframe, currency, symbols.setting)
+  }
+  if (nrow(sell_in)) {
+    html.data.mt5.symbol.closed_open.build.tickets(sell_in, buy_out, cprice, get.open.fun,
+                                                   timeframe, currency, symbols.setting)
+  }
 }
 
-html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part) {
+html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part, cprice,
+                                                           get.open.fun, timeframe, currency, symbols.setting) {
   in.part %<>%
     extract(j = csVOLUME := cumsum(VOLUME))
   out.part %<>%
@@ -316,15 +340,41 @@ html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part) {
     union(in.part[, csVOLUME], out.part[, csVOLUME]) %>%
     sort
   tickets.volume <- c(volume.cs[1], diff(volume.cs))
-  TEST <<- tickets <- 
+  tickets <- 
     data.table(
       VOLUME = tickets.volume,
-      csVOLUME = volume.cs
+      csVOLUME = volume.cs,
+      SL = 0,
+      TP = 0
     ) %>%
-    extract(i = c(in.part, out.part), on = 'csVOLUME')
-  
+    extract(i = c(in.part, out.part), on = 'csVOLUME') %>%
+    extract(j = COMMENT := paste(COMMENT, COMMENT.1)) %>%
+    setkey(COMMENT)
+  tickets[grep('sl', COMMENT), SL := CPRICE]
+  tickets[grep('tp', COMMENT), TP := CPRICE]
+  setkey(tickets, CPRICE)
+  open <- tickets[is.na(CPRICE)] 
+  closed <- fsetdiff(tickets, open)
+  if (nrow(open)) {
+    open[c('CPRICE', 'COMMISSION', 'SWAP') := list(cprice, 0, 0)] %>%
+      build.tickets('OPEN')
+  }
+  if (nrow(closed)) {
+    symbol <- item.to.symbol(closed[1, ITEM])
+    if (!is.na(symbol)) {
+      if (is.na(currency)) {
+        currency <- DEFAULT.CURRENCY
+      }
+      closed[, PROFIT := {
+        pips <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
+        tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, timeframe, currency, symbols.setting)
+        cal.profits(VOLUME, tickvalue, pips)
+      }]
+    }
+    build.tickets(closed, 'CLOSED')
+  }
 }
-
+  
 table.blocks <- function(table, blocks) {
   column <- unlist(table[, 1])
   table[, 1 := time.char.to.num(column)]
@@ -336,7 +386,7 @@ table.blocks <- function(table, blocks) {
     }
     block.index.begin <- block.index + 2
     block.index.end <- space.index[which(space.index >= block.index.begin)[1]] - 1
-    if (block.index.end <= block.index.begin) {
+    if (block.index.end < block.index.begin) {
       return(NULL)
     }
     table[block.index.begin:block.index.end]
