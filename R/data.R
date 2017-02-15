@@ -148,16 +148,19 @@ mysql.price.open <- function(symbol, time, timeframe='M1') {
   table <-
     paste(symbol, timeframe, sep = '_') %>%
     tolower
+  max.time <-
+    max(time)
+  min.time <-
+    min(time)
+  # time.posixct <- format.time.numeric.to.posixct(time)
   
-  time.time <- .format.time(time)
   
-  max.time <- max(time.time)
-  min.time <- min(time.time)
   from <- gsub('-', '.', as.character(as.Date(min.time)))
   to <- gsub('-', '.', as.character(as.Date(max.time) + 1))
   sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
   sql <- sprintf(sql.string, table, from, to)
   query.result <- mysql.query(sql)[[1]]
+  
   open.serie <- xts(query.result$open, as.POSIXct(strptime(with(query.result, time), '%Y.%m.%d %H:%M', tz = 'GMT')))
   time.string <- paste0('/', gsub('[.]', '-', as.character(time)))
   sapply(time.string, function(.time) {
@@ -176,6 +179,42 @@ mysql.price.open <- function(symbol, time, timeframe='M1') {
     res
   })
 }
+
+# mysql.price.open <- function(symbol, time, timeframe='M1') {
+#   # ''' get open data from mysql database '''
+#   # 2017-01-22: Version 1.0
+#   table <-
+#     paste(symbol, timeframe, sep = '_') %>%
+#     tolower
+#   max.time <- max(time)
+#   min.time <- min(time)
+#   time.posixct <- format.time.numeric.to.posixct(time)
+#   
+#   
+#   from <- gsub('-', '.', as.character(as.Date(min.time)))
+#   to <- gsub('-', '.', as.character(as.Date(max.time) + 1))
+#   sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
+#   sql <- sprintf(sql.string, table, from, to)
+#   query.result <- mysql.query(sql)[[1]]
+#   
+#   open.serie <- xts(query.result$open, as.POSIXct(strptime(with(query.result, time), '%Y.%m.%d %H:%M', tz = 'GMT')))
+#   time.string <- paste0('/', gsub('[.]', '-', as.character(time)))
+#   sapply(time.string, function(.time) {
+#     if (nchar(.time) == 11) {
+#       time <- paste(.time, '00:00')
+#     }
+#     res <- open.serie[.time]
+#     if (nrow(res) == 0) {
+#       return(NA)
+#     }
+#     res <- tail(res, 1)
+#     #### ToDo right now just use 7200 as threshold ####
+#     if (difftime(.format.time(gsub('/', '', .time)), index(res), units = 'secs') > 3600 * 2) {
+#       return(NA)
+#     }
+#     res
+#   })
+# }
 
 mysql.price.ohlc <- function(symbol, from, to, timeframe='M1') {
   # ''' get ohlc from mysql database '''
