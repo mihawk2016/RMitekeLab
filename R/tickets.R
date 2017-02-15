@@ -48,7 +48,8 @@ append.to.tickets.raw <- function(index) {
   tickets <-
     get.tickets.temp() %>%
     rbindlist(use.names = TRUE) %>%
-    extract(j = TICKETS.COLUMNS$UNIFORM, with = F)## ToDo: more to do, like 'format' & 'sort'
+    # extract(j = TICKETS.COLUMNS$UNIFORM, with = F)
+    setcolorder(TICKETS.COLUMNS$UNIFORM)#### ToDo: more to do, like 'format' & 'sort' ####
   init.tickets.temp()
   METAQUOTE.ANALYSTIC$TICKETS.RAW[[index]] <- tickets
 }
@@ -133,7 +134,6 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
       set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
                      'CTIME', '', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
       extract(j = (c('ITEM', 'COMMENT', 'TYPE')) := list(item, 'cancelled', toupper(TYPE))) %>%
-      # extract(j = TYPE := toupper(TYPE)) %>%
       build.tickets('PENDING')
   }
   pending.of.closed.ticktets.index <- table.index[grepl('(buy|sell) (limit|stop)', table.types[table.index], ignore.case = TRUE)]
@@ -153,7 +153,6 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
     closed.tickets %<>%
       set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
                      'CTIME', 'COMMENT', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
-      # extract(j = TYPE := toupper(TYPE)) %>%
       extract(j = c('ITEM', 'TYPE') := list(item, toupper(TYPE))) %>%
       extract(CTIME >= end.time - 60 & COMMENT == 'close at stop', EXIT := paste(COMMENT, 'so', sep = ' / '))
     symbol <- item.to.symbol(item)
@@ -201,17 +200,17 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
     setkey(CTIME) %>%
     extract(j = NAs := rowSums(is.na(.))) %>%
     setkey(NAs)
-  table[NAs == 10] %>%
+  table[.(10)] %>%
     extract(j = PROFIT := num.char.to.num(ITEM)) %>%
     extract(j = .(TICKET, OTIME, PROFIT, COMMENT)) %>%
     build.tickets('MONEY')
-  table[NAs == 0] %>%
+  table[.(0)] %>%
     build.tickets('CLOSED')
-  table[NAs == 1] %>%
+  table[.(1)] %>%
     build.tickets('OPEN')
-  table[NAs == 4] %>%
+  table[.(4)] %>%
     build.tickets('PENDING')
-  table[NAs == 5] %>%
+  table[.(5)] %>%
     build.tickets('WORKING')
 }
 
