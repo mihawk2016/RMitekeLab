@@ -1,6 +1,9 @@
 library(compiler)
 compilePKGS(T)
 
+#### @UPDATE IDEA@ ####
+## 2017-02-15: mt4 ea method can be more (data.table)able
+
 #### @PATCH NOTE@ ####
 ## 2017-02-12: Version 0.1
 
@@ -52,7 +55,7 @@ append.to.tickets.raw <- function(index) {
     setcolorder(TICKETS.COLUMNS$UNIFORM)#### ToDo: more to do, like 'format' & 'sort' ####
   init.tickets.temp()
   METAQUOTE.ANALYSTIC$TICKETS.RAW[[index]] <- tickets
-} 
+}
 
 fetch.tickets.raw <- function(index, get.open.fun, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   tickets.raw <- get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC)[[index]]
@@ -78,13 +81,10 @@ fetch.tickets.raw <- function(index, get.open.fun, timeframe='M1', symbols.setti
 #### FETCH TICKETS ####
 fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, timeframe='M1',
                                           currency, symbols.setting=SYMBOLS.SETTING) {
-  suppressWarnings({
-    table <-
-      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2,
-                    colClasses = c('character', time.char.to.num, 'character', num.char.to.num, num.char.to.num,
-                                   num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character'))
-  })
   table <-
+    readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2,
+                  colClasses = c('character', time.char.to.num, 'character', num.char.to.num, num.char.to.num,
+                                 num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character')) %>%
     as.data.table %>%
     set_colnames(c('deal', 'time', 'type', 'ticket', 'volume', 'price', 'sl', 'tp', 'profit', 'balance')) %>%
     extract(type != 'modify', -c('deal', 'balance'))
@@ -134,7 +134,7 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
     merge(table[pending.open.part.index], table[pending.close.part.index], by = 'ticket') %>%
       set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
                      'CTIME', '', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
-      extract(j = (c('ITEM', 'COMMENT', 'TYPE')) := list(item, 'cancelled', toupper(TYPE))) %>%
+      extract(j = (c('ITEM', 'COMMENT', 'TYPE')) := list(item, 'canceled', toupper(TYPE))) %>%
       build.tickets('PENDING')
   }
   pending.of.closed.ticktets.index <- table.index[grepl('(buy|sell) (limit|stop)', table.types[table.index], ignore.case = TRUE)]
@@ -173,14 +173,12 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
 } # FINISH
 
 fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
-  suppressWarnings({
-    table <-
-      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
-                    colClasses = c('numeric', time.char.to.num, toupper, num.char.to.num, toupper,
-                                   num.char.to.num, num.char.to.num, num.char.to.num, time.char.to.num,
-                                   num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num)) %>%
-      as.data.table
-  })
+  table <-
+    readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
+                  colClasses = c('numeric', time.char.to.num, toupper, num.char.to.num, toupper,
+                                 num.char.to.num, num.char.to.num, num.char.to.num, time.char.to.num,
+                                 num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num)) %>%
+    as.data.table
   ticket.index <-
     table[j = V1] %>%
     is.na %>%
@@ -216,29 +214,120 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
 } # FINISH
 
 fetch.html.data.tickets.mt5ea <- function(mq.file) {
-  suppressWarnings({
-    table <-
-      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 2,
-                    colClasses = c('character', num.char.to.num, toupper, toupper, toupper, num.char.to.num,
-                                   num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num,
-                                   num.char.to.num, num.char.to.num, 'character')) %>%
-      as.data.table
-  })
-  blocks.index <-
-    table[, 1] %>%
-    table.blocks.index('Deals')
-  deals.table <-
-    table[blocks.index$Deals] %>%
-    set_colnames(c())
-    
+  ## 13 columns
+  table.blocks <-
+    readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 2,
+                  colClasses = c('character', num.char.to.num, toupper, toupper, toupper, num.char.to.num,
+                                 num.char.to.num, num.char.to.num, rep('character', 5))) %>%
+    as.data.table %>%
+    table.blocks(c('Orders', 'Deals'))
+  orders.table <- table.blocks$Orders
+  if (!is.null(orders.table)) {
+    html.data.mt5.pending(orders.table)
+  }
+  deals.table <- table.blocks$Deals
+  if (!is.null(deals.table)) {
+    html.data.mt5.money_closed_open(deals.table)
+  }
+
+
+}
+
+fetch.html.data.tickets.mt5trade <- function(mq.file) {
+  ## 13 columns 
+  table.blocks  <-
+    readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
+                  colClasses = c('character', num.char.to.num, toupper, toupper, toupper, num.char.to.num,
+                                 num.char.to.num, num.char.to.num, rep('character', 5))) %>%
+    as.data.table %>%
+    table.blocks(c('Orders', 'Deals'))
+  orders.table <- table.blocks$Orders
+  if (!is.null(orders.table)) {
+    html.data.mt5.pending(orders.table)
+  }
+}
+
+html.data.mt5.pending <- function(orders.table) {
+  setkey(orders.table, V10)
+  orders.table['canceled'] %>%
+    extract(j = c(10, 12, 13) := NULL) %>%
+    setnames(1:10, c('OTIME', 'TICKET', 'ITEM', 'TYPE', 'VOLUME', 'OPRICE', 'SL', 'TP', 'CTIME', 'COMMENT')) %>%
+    extract(j = c('CTIME', 'VOLUME') := list(time.char.to.num(CTIME), as.numeric(gsub(' / .*', '', VOLUME)))) %>%
+    extract(j = c('SL', 'TP') := list(ifelse(is.na(SL), 0, SL), ifelse(is.na(TP), 0, TP))) %>%
+    build.tickets('PENDING')
+}
+
+html.data.mt5.money_closed_open <- function(deals.table) {
+  deals.table %<>%
+    extract(j = c(2, 12) := NULL) %>%
+    set_colnames(c('OTIME', 'ITEM', 'TYPE', 'direction', 'VOLUME', 'price', 'TICKET', 'COMMISSION',
+                   'SWAP', 'PROFIT', 'COMMENT')) %>%
+    setkey(TYPE)
+  deals.table['BALANCE'] %>%
+    build.tickets('MONEY')
+  deals.table[!'BALANCE', html.data.mt5.symbol.closed_open(.SD, ITEM), by = ITEM]
+}
+
+html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item) {
+  deals.no.money.table %<>% copy
+  if (any('IN/OUT' %in% deals.no.money.table[, direction])) {
+    deals.no.money.table %<>%
+      setkey(OTIME) %>%
+      extract(j = nVOLUME := {
+        nvolume.change <- ifelse(TYPE == 'BUY', VOLUME, -VOLUME)
+        cumsum(nvolume.change)
+      })
+    in_out.tickets <-
+      deals.no.money.table %>%
+      setkey(direction) %>%
+      extract('IN/OUT', nVOLUME := abs(nVOLUME))
+    new.in.tickets <- in_out.tickets[, c('direction', 'VOLUME') := list('IN', nVOLUME)]
+    new.out.tickets <- in_out.tickets[, c('direction', 'VOLUME') := list('OUT', VOLUME - nVOLUME)]
+    deals.no.money.table %<>%
+      rbind(., new.in.tickets, new.out.tickets) %>%
+      extract(j = nVOLUME := NULL)
+  }
+  deals.no.money.table %<>%
+    setkey(direction)
+  in.part <-
+    deals.no.money.table['IN'] %>%
+    extract(j = c('COMMISSION', 'SWAP', 'PROFIT', 'direction') := NULL) %>%
+    setnames('price', 'OPRICE') %>%
+    setkey(TYPE)
+  buy_in <- in.part['BUY']
+  sell_in <- in.part['SELL']
+  out.part <-
+    deals.no.money.table['OUT'] %>%
+    extract(j = c('direction', 'ITEM') := list(NULL, item)) %>%
+    setnames(c('OTIME', 'price'), c('CTIME', 'CPRICE')) %>%
+    setkey(TYPE)
+  buy_out <- out.part['BUY']
+  sell_out <- out.part['SELL']
+
+  html.data.mt5.symbol.closed_open.build.tickets(buy_in, sell_out)
+}
+
+html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part) {
+  in.part %<>%
+    extract(j = csVOLUME := cumsum(VOLUME))
+  out.part %<>%
+    extract(j = csVOLUME := cumsum(VOLUME))
+  volume.cs <-
+    union(in.part[, csVOLUME], out.part[, csVOLUME]) %>%
+    sort
+  tickets.volume <- c(volume.cs[1], diff(volume.cs))
+  TEST <<- tickets <- 
+    data.table(
+      VOLUME = tickets.volume,
+      csVOLUME = volume.cs
+    ) %>%
+    extract(i = c(in.part, out.part), on = 'csVOLUME')
   
 }
 
-mt5.money_closed_open <- funtion(deals.table) {
-  
-}
-
-table.blocks.index <- function(column, blocks) {
+table.blocks <- function(table, blocks) {
+  column <- unlist(table[, 1])
+  table[, 1 := time.char.to.num(column)]
   space.index <- which(column == '')
   lapply(blocks, function(block) {
     block.index <- which(column == block)
@@ -250,54 +339,57 @@ table.blocks.index <- function(column, blocks) {
     if (block.index.end <= block.index.begin) {
       return(NULL)
     }
-    block.index.begin:block.index.end
+    table[block.index.begin:block.index.end]
   }) %>%
     set_names(blocks)
 } # FINISH
 
-fetch.html.data.tickets.mt5trade <- function(mq.file) {
-  suppressWarnings({
-    table <-
-      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1)
-    
-  })
-  
-  
-}
+# table.blocks.index <- function(column, blocks) {
+#   space.index <- which(column == '')
+#   lapply(blocks, function(block) {
+#     block.index <- which(column == block)
+#     if (!length(block.index)) {
+#       return(NULL)
+#     }
+#     block.index.begin <- block.index + 2
+#     block.index.end <- space.index[which(space.index >= block.index.begin)[1]] - 1
+#     if (block.index.end <= block.index.begin) {
+#       return(NULL)
+#     }
+#     block.index.begin:block.index.end
+#   }) %>%
+#     set_names(blocks)
+# } # FINISH
+
+
 
 fetch.html.data.tickets.mt4m_closed <- function(mq.file) {
-  suppressWarnings({
-    table <-
-      readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
-                    colClasses = c('numeric', rep('character', 2), time.char.to.num, toupper, toupper,
-                                   num.char.to.num, num.char.to.num, time.char.to.num, num.char.to.num, num.char.to.num,
-                                   num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character'))
-  })
-  as.data.table(table) %>%
+  readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
+                colClasses = c('numeric', rep('character', 2), time.char.to.num, toupper, toupper,
+                               num.char.to.num, num.char.to.num, time.char.to.num, num.char.to.num, num.char.to.num,
+                               num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character')) %>%
+    as.data.table %>%
     extract(j = c('V2', 'V3', 'V13', 'V16', 'V17') := list(NULL, NULL, NULL, NULL, paste(V17, V2, sep = ' | '))) %>%
-    extract(i = 2:(nrow(.) - 1)) %>%
+    extract(i = 2:(.N - 1)) %>%
     set_colnames(c('TICKET', 'OTIME', 'TYPE', 'ITEM', 'VOLUME', 'OPRICE', 'CTIME',
                    'CPRICE', 'COMMISSION', 'TAXES', 'SWAP', 'PROFIT', 'COMMENT')) %>%
     build.tickets('CLOSED')
 } # FINISH
 
 fetch.html.data.tickets.mt4m_raw <- function(mq.file) {
-  suppressWarnings({
     table <-
       readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
                     colClasses = c('numeric', 'character', time.char.to.num, toupper, toupper, num.char.to.num,
                                    num.char.to.num, num.char.to.num, num.char.to.num, time.char.to.num, num.char.to.num,
                                    rep('character', 6), num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num,
-                                   rep('character', 2)))
-  })
-  table %<>%
-    as.data.table %>%
-    extract(j = c('V2', 'V12', 'V13', 'V14', 'V15', 'V16', 'V17', 'V22', 'V23') := 
-              list(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, paste(V23, V2, sep = ' | '))) %>%
-    extract(i = 2:(nrow(.) - 7)) %>%
-    set_colnames(c('TICKET', 'OTIME', 'TYPE', 'ITEM', 'VOLUME', 'SL', 'TP', 'OPRICE', 'CTIME',
-                   'CPRICE', 'COMMISSION', 'TAXES', 'SWAP', 'PROFIT', 'COMMENT')) %>%
-    setkey(TYPE)
+                                   rep('character', 2))) %>%
+      as.data.table %>%
+      extract(j = c('V2', 'V12', 'V13', 'V14', 'V15', 'V16', 'V17', 'V22', 'V23') := 
+                list(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, paste(V23, V2, sep = ' | '))) %>%
+      extract(i = 2:(.N - 7)) %>%
+      set_colnames(c('TICKET', 'OTIME', 'TYPE', 'ITEM', 'VOLUME', 'SL', 'TP', 'OPRICE', 'CTIME',
+                     'CPRICE', 'COMMISSION', 'TAXES', 'SWAP', 'PROFIT', 'COMMENT')) %>%
+      setkey(TYPE)
   table['BALANCE'] %>%
     build.tickets('MONEY')
   table[c('BUY LIMIT', 'BUY STOP', 'SELL LIMIT', 'SELL STOP')] %>%
