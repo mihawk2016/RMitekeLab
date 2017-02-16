@@ -6,7 +6,7 @@ compilePKGS(T)
 ## 2017-02-05: Version 0.1
 
 #### ENVIRONMENT ####
-METAQUOTE.ANALYSTIC <- new.env()
+METAQUOTE.ANALYSTIC <- new.env(parent = baseenv())
 assign('INFOS', list(), envir = METAQUOTE.ANALYSTIC)
 assign('html.parse', list(), envir = METAQUOTE.ANALYSTIC)
 assign('MISMATCH', c(), envir = METAQUOTE.ANALYSTIC)

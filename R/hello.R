@@ -1,9 +1,14 @@
-## 2017-02-05: Version 0.1
-
 library(compiler)
 compilePKGS(T)
 
-read.mq.file <- function(mq.files, cluster) {
+#### @UPDATE IDEA@ ####
+## 2017-02-16: loose coupling for environment
+## 2017-02-16: parallel problem, they should just return values
+
+#### @PATCH NOTE@ ####
+## 2017-02-05: Version 0.1
+
+read.mq.file <- function(mq.files, cluster=NULL) {
   # ''' read mq files (V) '''
   # @param mq.files: MetaQuote files.
   # @return:
@@ -16,11 +21,11 @@ read.mq.file <- function(mq.files, cluster) {
   } else {
     mq.names <- basename(mq.files)
   }
-  if (missing(cluster) || length(mq.files) < 4) {
+  if (is.null(cluster) || length(mq.files) < 4) {
     mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
-  } else (
+  } else {
     clusterMap(cluster, fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
-  )
+  }
   METAQUOTE.ANALYSTIC$TICKETS.RAW %<>%
     c(vector('list', length(get.infos()) - length(get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC))))
 }

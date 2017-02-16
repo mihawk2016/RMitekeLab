@@ -35,11 +35,15 @@ get.tickets.temp <- function() {
   get('TICKETS.TEMP', envir = METAQUOTE.ANALYSTIC)
 }
 
-get.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
+get.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING, cluster=NULL) {
   if (missing(index)) {
     index <- 1:length(get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC))
   }
-  lapply(index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
+  if (is.null(cluster) || length(index) < 4) {
+    lapply(index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
+  } else {
+    parLapplyLB(cluster, index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
+}
 }
 
 append.to.tickets.temp <- function(tickets) {

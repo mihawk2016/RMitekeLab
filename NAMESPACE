@@ -1,5 +1,6 @@
 import(magrittr)
 # import(lubridate)
+import(parallel)
 import(RMySQL)
 import(data.table)
 import(stringr)
