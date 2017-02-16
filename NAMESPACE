@@ -1,10 +1,11 @@
 import(magrittr)
 # import(lubridate)
+import(RMySQL)
 import(data.table)
 import(stringr)
 import(xml2)
 importFrom(XML, readHTMLTable)
 importFrom(lubridate, ymd_hms, ymd_hm, ymd)
-
+importFrom(zoo, na.locf)
 
 exportPattern("^[[:alpha:]]+")

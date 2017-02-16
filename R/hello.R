@@ -60,8 +60,13 @@ fetch.html.data <- function(mq.file) {
   # 2017-02-05: Version 0.1
   title <-
     tryCatch(
-      readLines(file(mq.file, encoding = 'UTF-8'), 4, ok = FALSE, warn = FALSE),
-      error = function(e) readLines(file(mq.file, encoding = 'UTF-16'), 4, ok = FALSE, warn = FALSE)
+      suppressWarnings(readLines(con8 <- file(mq.file, open = 'rt', encoding = 'UTF-8'), 4, ok = FALSE, warn = FALSE)),
+      error = function(e) {
+        lines <- readLines(con16 <- file(mq.file, open = 'rt', encoding = 'UTF-16'), 4, ok = FALSE, warn = FALSE)
+        close(con16)
+        lines
+      },
+      finally = close(con8)
     ) %>%
     extract((.) %>%
               str_detect('<title>') %>%

@@ -29,7 +29,8 @@ init.infos.temp <- function() {
 }
 
 append.to.infos <- function() {
-  with(METAQUOTE.ANALYSTIC, INFOS <- c(INFOS, list(INFOS.TEMP)))
+  # with(METAQUOTE.ANALYSTIC, INFOS <- c(INFOS, list(INFOS.TEMP)))
+  METAQUOTE.ANALYSTIC$INFOS <- c(METAQUOTE.ANALYSTIC$INFOS, list(METAQUOTE.ANALYSTIC$INFOS.TEMP))
 }
 
 #### FETCH INFOS ####

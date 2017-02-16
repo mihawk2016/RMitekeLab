@@ -12,6 +12,86 @@ MYSQL.SETTING <- list(
   PASSWORD = '',
   DBNAME = 'historical_data'
 )
+
+#### DATABASE FUNCTIONS ####
+DB.O <- function(symbol, time, timeframe='M1') {
+  mysql.price.open(symbol, time, timeframe)
+}
+
+
+#### MYSQL ####
+mysql.query <- function(sql, host=MYSQL.SETTING$HOST, port=MYSQL.SETTING$PORT,
+                        username=MYSQL.SETTING$USERNAME, password=MYSQL.SETTING$PASSWORD, dbname=MYSQL.SETTING$DBNAME) {
+  # ''' mysql query '''
+  # 2017-01-22: Version 1.0
+  if (length(sql) == 0) {
+    return(NULL)
+  }
+  
+  mysql.connect <- tryCatch(
+    dbConnect(MySQL(), host = host, port = port, username = username, password = password, dbname = dbname),
+    error = function(e) {
+      message('MySQL Connect ERROR')
+      NULL
+    }
+  )
+  if (is.null(mysql.connect)) {
+    return(NULL)
+  }
+  res <- lapply(sql, function(s) {
+    dbGetQuery(mysql.connect, s)
+  })
+  dbDisconnect(mysql.connect)
+  res
+}
+
+mysql.price.open <- function(symbol, time, timeframe='M1') {
+  # ''' get open data from mysql database '''
+  # 2017-02-16: Version 2.0 use data.table, optimize method
+  # 2017-01-22: Version 1.0
+  table <-
+    paste(symbol, timeframe, sep = '_') %>%
+    tolower
+  time.table <- data.table(time = time, key = 'time')
+  max.time <-
+    max(time) %>%
+    as.POSIXct(origin = '1970-01-01', tz = 'GMT') %>%
+    as.Date %>%
+    add(1)
+  min.time <-
+    min(time) %>%
+    as.POSIXct(origin = '1970-01-01', tz = 'GMT') %>%
+    as.Date
+  time.period <- gsub('-', '.', as.character(c(min.time, max.time)))
+  sql.string <- "SELECT time, open FROM %s WHERE time BETWEEN '%s' AND '%s'"
+  sql <- sprintf(sql.string, table, time.period[1], time.period[2])
+  mysql.query(sql)[[1]] %>%
+    as.data.table %>%
+    extract(j = time := time.char.to.num(time)) %>%
+    setkey(time) %>%
+    extract(i = time.table, roll = 'nearest') %>%
+    extract(j = open)
+} # FINISH
+
+mysql.price.ohlc <- function(symbol, from, to, timeframe='M1') {
+  # ''' get ohlc from mysql database '''
+  # 2017-01-22: Version 1.0
+  table <-
+    paste(symbol, timeframe, sep = '_') %>%
+    tolower
+  
+  
+  from <- gsub('-', '.', as.character(as.Date(.format.time(from))))
+  to <- gsub('-', '.', as.character(as.Date(.format.time(to)) + 1))
+  sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
+  sql <- sprintf(sql.string, table, from, to)
+  query.result <- mysql.query(sql)[[1]]
+  time <- as.POSIXct(strptime(query.result$time, '%Y.%m.%d %H:%M', tz = 'GMT'))
+  price <- xts(query.result[2:5], time)
+  colnames(price) <- c('Open', 'High', 'Low', 'Close')
+  price
+}
+
 # 
 # #### LOCAL ENVIRONMENT ####
 # init.local.data <- function() {
@@ -116,122 +196,4 @@ MYSQL.SETTING <- list(
 #   merged.data <- merged.data[!duplicated(index(merged.data))] 
 #   set.local.data.table(symbol, timeframe, merged.data)
 # } # FINISH
-
-#### MYSQL ####
-mysql.query <- function(sql, host=MYSQL.SETTING$HOST, port=MYSQL.SETTING$PORT,
-                        username=MYSQL.SETTING$USERNAME, password=MYSQL.SETTING$PASSWORD, dbname=MYSQL.SETTING$DBNAME) {
-  # ''' mysql query '''
-  # 2017-01-22: Version 1.0
-  if (length(sql) == 0) {
-    return(NULL)
-  }
-  mysql.connect <- tryCatch(
-    dbConnect(MySQL(), host = host, port = port, username = username, password = password, dbname = dbname),
-    error = function(e) {
-      message('MySQL Connect ERROR')
-      NULL
-    }
-  )
-  if (is.null(mysql.connect)) {
-    return(NULL)
-  }
-  res <- lapply(sql, function(s) {
-    dbGetQuery(mysql.connect, s)
-  })
-  dbDisconnect(mysql.connect)
-  res
-}
-
-mysql.price.open <- function(symbol, time, timeframe='M1') {
-  # ''' get open data from mysql database '''
-  # 2017-01-22: Version 1.0
-  table <-
-    paste(symbol, timeframe, sep = '_') %>%
-    tolower
-  max.time <-
-    max(time)
-  min.time <-
-    min(time)
-  # time.posixct <- format.time.numeric.to.posixct(time)
-  
-  
-  from <- gsub('-', '.', as.character(as.Date(min.time)))
-  to <- gsub('-', '.', as.character(as.Date(max.time) + 1))
-  sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
-  sql <- sprintf(sql.string, table, from, to)
-  query.result <- mysql.query(sql)[[1]]
-  
-  open.serie <- xts(query.result$open, as.POSIXct(strptime(with(query.result, time), '%Y.%m.%d %H:%M', tz = 'GMT')))
-  time.string <- paste0('/', gsub('[.]', '-', as.character(time)))
-  sapply(time.string, function(.time) {
-    if (nchar(.time) == 11) {
-      time <- paste(.time, '00:00')
-    }
-    res <- open.serie[.time]
-    if (nrow(res) == 0) {
-      return(NA)
-    }
-    res <- tail(res, 1)
-    #### ToDo right now just use 7200 as threshold ####
-    if (difftime(.format.time(gsub('/', '', .time)), index(res), units = 'secs') > 3600 * 2) {
-      return(NA)
-    }
-    res
-  })
-}
-
-# mysql.price.open <- function(symbol, time, timeframe='M1') {
-#   # ''' get open data from mysql database '''
-#   # 2017-01-22: Version 1.0
-#   table <-
-#     paste(symbol, timeframe, sep = '_') %>%
-#     tolower
-#   max.time <- max(time)
-#   min.time <- min(time)
-#   time.posixct <- format.time.numeric.to.posixct(time)
-#   
-#   
-#   from <- gsub('-', '.', as.character(as.Date(min.time)))
-#   to <- gsub('-', '.', as.character(as.Date(max.time) + 1))
-#   sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
-#   sql <- sprintf(sql.string, table, from, to)
-#   query.result <- mysql.query(sql)[[1]]
-#   
-#   open.serie <- xts(query.result$open, as.POSIXct(strptime(with(query.result, time), '%Y.%m.%d %H:%M', tz = 'GMT')))
-#   time.string <- paste0('/', gsub('[.]', '-', as.character(time)))
-#   sapply(time.string, function(.time) {
-#     if (nchar(.time) == 11) {
-#       time <- paste(.time, '00:00')
-#     }
-#     res <- open.serie[.time]
-#     if (nrow(res) == 0) {
-#       return(NA)
-#     }
-#     res <- tail(res, 1)
-#     #### ToDo right now just use 7200 as threshold ####
-#     if (difftime(.format.time(gsub('/', '', .time)), index(res), units = 'secs') > 3600 * 2) {
-#       return(NA)
-#     }
-#     res
-#   })
-# }
-
-mysql.price.ohlc <- function(symbol, from, to, timeframe='M1') {
-  # ''' get ohlc from mysql database '''
-  # 2017-01-22: Version 1.0
-  table <-
-    paste(symbol, timeframe, sep = '_') %>%
-    tolower
-  
-  
-  from <- gsub('-', '.', as.character(as.Date(.format.time(from))))
-  to <- gsub('-', '.', as.character(as.Date(.format.time(to)) + 1))
-  sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
-  sql <- sprintf(sql.string, table, from, to)
-  query.result <- mysql.query(sql)[[1]]
-  time <- as.POSIXct(strptime(query.result$time, '%Y.%m.%d %H:%M', tz = 'GMT'))
-  price <- xts(query.result[2:5], time)
-  colnames(price) <- c('Open', 'High', 'Low', 'Close')
-  price
-}
 
