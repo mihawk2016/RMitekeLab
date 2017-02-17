@@ -54,9 +54,14 @@ tickets.statistics.by.result <- function(tickets.edited) {
   tickets.edited[j = .(N = .N,
                        SUM = sum(NPROFIT),
                        MEAN = mean(NPROFIT),
-                       MAX = ifelse(
-                         # max(abs(NPROFIT)),
-                       SUM.PIP = sum(PIP)
+                       MAX = ifelse(sign(NPROFIT[1]) == -1, min(NPROFIT), max(NPROFIT)),
+                       PIP.SUM = sum(PIP),
+                       PIP.MEAN = mean(PIP),
+                       PIP.MAX = ifelse(sign(PIP[1]) == -1, min(PIP), max(PIP)),
+                       VOL.SUM = sum(VOLUME),
+                       VOL.MEAN = mean(VOLUME),
+                       VOL.MAX = ifelse(sign(VOLUME[1]) == -1, min(VOLUME), max(VOLUME)),
+                       VOL.MIN = ifelse(sign(VOLUME[1]) == -1, max(VOLUME), min(VOLUME))
                        ),
                  by = RESULT]
 }
