@@ -205,17 +205,17 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
     setkey(CTIME) %>%
     extract(j = NAs := rowSums(is.na(.))) %>%
     setkey(NAs)
-  table[.(10)] %>%
+  table[.(10), nomatch = 0] %>%
     extract(j = PROFIT := num.char.to.num(ITEM)) %>%
     extract(j = .(TICKET, OTIME, PROFIT, COMMENT)) %>%
     build.tickets('MONEY')
-  table[.(0)] %>%
+  table[.(0), nomatch = 0] %>%
     build.tickets('CLOSED')
-  table[.(1)] %>%
+  table[.(1), nomatch = 0] %>%
     build.tickets('OPEN')
-  table[.(4)] %>%
+  table[.(4), nomatch = 0] %>%
     build.tickets('PENDING')
-  table[.(5)] %>%
+  table[.(5), nomatch = 0] %>%
     build.tickets('WORKING')
 } # FINISH
 
@@ -615,14 +615,14 @@ item.to.symbol <- function(item, support.symbols=SUPPORT.SYMBOLS) {
   # ''' item to symbol '''
   
   if (is.na(item) || item == '' || grepl('^BX', item, ignore.case = TRUE)) {
-    return(NA) 
+    return(NA_character_) 
   }
   support.symbols %>%
     extract(support.symbols %>% str_detect(item)) %>% {
       if (length(.) == 1) {
         .
       } else {
-        NA
+        NA_character_
       }
     }
 }
