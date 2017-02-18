@@ -70,27 +70,39 @@ tickets.statistics.by.result <- function(tickets.edited) {
 
 #### UTILS ####
 cal.continuous <- function(x) {
-  
   if (!(len <- length(x))) {
     return(NULL)
   }
   signs <- ifelse(x >= 0, 1, 0)
   turns <- diff(signs)
-  dn.end <- which(turns == 1)
-  up.begin <- dn.end + 1
-  up.end <- which(turns == -1)
-  dn.begin <- up.end + 1
+  dn.to <- which(turns == 1)
+  up.from <- dn.to + 1
+  up.to <- which(turns == -1)
+  dn.from <- up.to + 1
   if (signs[1]) {
-    up.begin %<>% c(1, .)
+    up.from %<>% c(1, .)
   } else {
-    dn.begin %<>% c(1, .)
+    dn.from %<>% c(1, .)
   }
   if (signs[len]) {
-    up.end %<>% c(len)
+    up.to %<>% c(len)
   } else {
-    dn.end %<>% c(len)
+    dn.to %<>% c(len)
   }
-  list(up.begin, up.end, dn.begin, dn.end)
+  list(up.from = up.from, up.to = up.to, dn.from = dn.from, dn.to = dn.to)
 }
 
-
+maxdrawdown <- function(x) {
+  if (!length(x)) {
+    return(NULL)
+  }
+  cum.maxdrawdown <- cummax(x) - x
+  mdd <- max(cum.maxdrawdown)
+  to <- which(mdd == cum.maxdrawdown)
+  cum.max.index <- which(cum.maxdrawdown == 0)
+  from <- sapply(to, function(x) {
+    # max(which[cum.maxdrawdown[1:x] < x[])]
+    cum.max.index[max(which(cum.max.index < x))]
+  })
+  list(MDD = mdd, FROM = from, TO = to)
+}
