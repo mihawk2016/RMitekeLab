@@ -2,7 +2,7 @@ library(compiler)
 compilePKGS(T)
 
 #### @UPDATE IDEA@ ####
-
+## 2017-02-17: 
 
 #### @PATCH NOTE@ ####
 ## 2017-02-17: Version 0.1
@@ -65,3 +65,32 @@ tickets.statistics.by.result <- function(tickets.edited) {
                        ),
                  by = RESULT]
 }
+
+
+
+#### UTILS ####
+cal.continuous <- function(x) {
+  
+  if (!(len <- length(x))) {
+    return(NULL)
+  }
+  signs <- ifelse(x >= 0, 1, 0)
+  turns <- diff(signs)
+  dn.end <- which(turns == 1)
+  up.begin <- dn.end + 1
+  up.end <- which(turns == -1)
+  dn.begin <- up.end + 1
+  if (signs[1]) {
+    up.begin %<>% c(1, .)
+  } else {
+    dn.begin %<>% c(1, .)
+  }
+  if (signs[len]) {
+    up.end %<>% c(len)
+  } else {
+    dn.end %<>% c(len)
+  }
+  list(up.begin, up.end, dn.begin, dn.end)
+}
+
+

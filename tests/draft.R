@@ -261,39 +261,6 @@ check.overnight.for.swap <- function(close.time, open.time) {
 
 #### Calculate Utils ####
 
-continuous.profit_loss <- function(x) {
-  # ''' calculate continuous profits and losses '''
-  # 2016-08-19: Optimize
-  len <- length(x)
-  if(len == 0) return(list(UpFrom = 0, UpCon = 0, DownFrom = 0, DownCon = 0))
-  signs <- sign(x)
-  if(all(signs == 1)) return(list(UpFrom = 1, UpCon = len, DownFrom = 0, DownCon = 0))
-  if(all(signs == -1)) return(list(UpFrom = 0, UpCon = 0, DownFrom = 1, DownCon = len))
-  diff.signs <- diff(signs)
-  turns <- c(signs[1], diff.signs)
-  down.begin <- which(turns < 0)
-  up.begin <- which(turns > 0)
-  suppressWarnings(
-    if(down.begin[1] > up.begin[1]) {
-      up.con <- down.begin - up.begin
-      down.con <- up.begin[-1] - down.begin
-    } else {
-      down.con <- up.begin - down.begin
-      up.con <- down.begin[-1] - up.begin
-    }
-  )
-  last.con <- len - tail(which(turns != 0), 1) + 1
-  if(length(up.con) == 0) up.con <- last.con
-  if(length(down.con) == 0) down.con <- last.con
-  up.con[up.con < 0] <- last.con
-  down.con[down.con < 0] <- last.con
-  list(
-    UpFrom = up.begin,
-    UpCon = up.con,
-    DownFrom = down.begin,
-    DownCon = down.con
-  )
-} # 2016-08-19: Optimize
 
 sharpe.ratio <- function(x) {
   # ''' calculate sharpe ratio '''
