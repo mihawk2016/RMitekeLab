@@ -53,44 +53,121 @@ tickets.statistics <- function(tickets.edited) {
 tickets.statistics.by.result <- function(tickets.edited) {
   tickets.edited[j = .(N = .N,
                        SUM = sum(NPROFIT),
-                       MEAN = mean(NPROFIT),
+                       MEAN = round(mean(NPROFIT), 2),
                        MAX = ifelse(sign(NPROFIT[1]) == -1, min(NPROFIT), max(NPROFIT)),
                        PIP.SUM = sum(PIP),
-                       PIP.MEAN = mean(PIP),
+                       PIP.MEAN = round(mean(PIP), 2),
                        PIP.MAX = ifelse(sign(PIP[1]) == -1, min(PIP), max(PIP)),
                        VOL.SUM = sum(VOLUME),
-                       VOL.MEAN = mean(VOLUME),
+                       VOL.MEAN = round(mean(VOLUME), 2),
                        VOL.MAX = ifelse(sign(VOLUME[1]) == -1, min(VOLUME), max(VOLUME)),
                        VOL.MIN = ifelse(sign(VOLUME[1]) == -1, max(VOLUME), min(VOLUME))
                        ),
-                 by = RESULT]
+                 by = RESULT] %>%
+    setkey(RESULT) %>%
+    extract(c('PROFIT', 'LOSS')) %>%
+    extract(is.na(N), 2:ncol(.) := list(0))
+} # FINISH
+
+tickets.statistics.by.exit <- function(tickets.edited) {
+  tickets.edited[i = !is.na(EXIT),
+                 j = .(N = .N,
+                       NPROFIT = sum(NPROFIT)
+                       ),
+                 by = EXIT] %>%
+    setkey(EXIT) %>%
+    extract(c('SL', 'TP', 'SO')) %>%
+    extract(is.na(N), 2:ncol(.) := list(0))
+} # FINISH
+
+tickets.statistics.by.type <- function(tickets.edited) {
+  tickets.edited[j = .(N = .N,
+                       NVOLUME = sum(VOLUME)
+                 ),
+                 by = TYPE] %>%
+    setkey(TYPE) %>%
+    extract(c('BUY', 'SELL')) %>%
+    extract(is.na(N), 2:ncol(.) := list(0))
+} # FINISH
+
+tickets.statistics.summary <- function(statistics.result) {
+  statistics.result[j = .('N.TRADE' = sum(N),
+                          'NET.PROFIT' = sum(SUM),
+                          'NET.PIP' = sum(PIP.SUM),
+                          'SUM.VOLUME' = sum(VOL.SUM),
+                          'WIN%' = round(N[1] / sum(N) * 100, 2),
+                          'PROFIT.FACTOR' = round(SUM[1] / -SUM[2], 2),
+                          'EXPECT' = round(sum(SUM) / sum(N), 2),
+                          'VOL/TRADE' = round(sum(VOL.SUM) / sum(N), 2),
+                          'PROFIT/TRADE' = round(sum(SUM) / sum(VOL.SUM), 2)
+                          )]
 }
+
+tickets.statistics.continuous <- function(tickets.edited) {
+  nprofit <-
+    tickets.edited %>%
+    setkey(CTIME) %>%
+    extract(j = NPROFIT)
+  col.name <- c('CON.N.MAX', 'CON.N.MEAN', 'CON.MAX', 'CON.MEAN')
+  row.name <- c('PROFIT', 'LOSS')
+  con.table <-
+    data.table(RESULT = row.name, matrix(data = NA_real_, nrow = length(row.name), ncol = length(col.name),
+                                         dimnames = list(NULL, col.name))) %>%
+    setkey(RESULT)
+  continuous <- cal.continuous(nprofit)
+  if (length(continuous$UP.FROM)) {
+    up.n <- with(continuous, UP.TO - UP.FROM) + 1
+    up.pl <- mapply(function(from, to) {
+      sum(nprofit[from:to])
+    }, from = continuous$UP.FROM, to = continuous$UP.TO)
+    con.table['PROFIT', (col.name) := list(max(up.n), mean(up.n), max(up.pl), mean(up.pl))]
+  }
+  if (length(continuous$DN.FROM)) {
+    dn.n <- with(continuous, DN.TO - DN.FROM) + 1
+    dn.pl <- mapply(function(from, to) {
+      sum(nprofit[from:to])
+    }, from = continuous$DN.FROM, to = continuous$DN.TO)
+    con.table['LOSS', (col.name) := list(max(dn.n), mean(dn.n), max(dn.pl), mean(dn.pl))]
+  }
+  con.table[row.name]
+} # FINISH
 
 
 
 #### UTILS ####
 cal.continuous <- function(x) {
-  
   if (!(len <- length(x))) {
     return(NULL)
   }
   signs <- ifelse(x >= 0, 1, 0)
   turns <- diff(signs)
-  dn.end <- which(turns == 1)
-  up.begin <- dn.end + 1
-  up.end <- which(turns == -1)
-  dn.begin <- up.end + 1
+  dn.to <- which(turns == 1)
+  up.from <- dn.to + 1
+  up.to <- which(turns == -1)
+  dn.from <- up.to + 1
   if (signs[1]) {
-    up.begin %<>% c(1, .)
+    up.from %<>% c(1, .)
   } else {
-    dn.begin %<>% c(1, .)
+    dn.from %<>% c(1, .)
   }
   if (signs[len]) {
-    up.end %<>% c(len)
+    up.to %<>% c(len)
   } else {
-    dn.end %<>% c(len)
+    dn.to %<>% c(len)
   }
-  list(up.begin, up.end, dn.begin, dn.end)
-}
+  list(UP.FROM = up.from, UP.TO = up.to, DN.FROM = dn.from, DN.TO = dn.to)
+} # FINISH
 
-
+maxdrawdown <- function(x) {
+  if (!(len <- length(x))) {
+    return(NULL)
+  }
+  cum.drawdown <- cummax(x) - x
+  mdd <- max(cum.drawdown)
+  to <- which(mdd == cum.drawdown)
+  cum.max <- which(cum.drawdown  == 0)
+  from <- sapply(to, function(x) {
+    cum.drawdown[sum(cum.drawdown < to)]
+  })
+  list(MDD = mdd, FROM = from, TO = to)
+} # FINISH

@@ -587,7 +587,7 @@ cal.margin.required = function(symbol, times, get.open.fun, timeframe='M1', curr
 cal.profits <- function(volume, tickvalue, pips) {
   # ''' calculate profit from: volume, tickvalue, pips '''
   # 2016-08-15: Version 1.0
-  volume * tickvalue * pips
+  round(volume * tickvalue * pips, 2)
 }
 
 cal.pips <- function(type, open.price, close.price, digit) {
