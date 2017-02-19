@@ -1,6 +1,9 @@
 library(compiler)
 compilePKGS(T)
 
+#### @UPDATE IDEA@ ####
+## 2017-02-20: mysql.price.ohlc add parallel method
+
 #### @PATCH NOTE@ ####
 ## 2017-02-13: Version 0.2 speed of mysql is good enough, hang-up the local method
 ## 2017-02-13: Version 0.1
@@ -27,7 +30,6 @@ mysql.query <- function(sql, host=MYSQL.SETTING$HOST, port=MYSQL.SETTING$PORT,
   if (length(sql) == 0) {
     return(NULL)
   }
-  
   mysql.connect <- tryCatch(
     dbConnect(MySQL(), host = host, port = port, username = username, password = password, dbname = dbname),
     error = function(e) {
@@ -43,7 +45,7 @@ mysql.query <- function(sql, host=MYSQL.SETTING$HOST, port=MYSQL.SETTING$PORT,
   })
   dbDisconnect(mysql.connect)
   res
-}
+} # FINISH
 
 mysql.price.open <- function(symbol, time, timeframe='M1') {
   # ''' get open data from mysql database '''
@@ -55,12 +57,12 @@ mysql.price.open <- function(symbol, time, timeframe='M1') {
   time.table <- data.table(time = time, key = 'time')
   max.time <-
     max(time) %>%
-    as.POSIXct(origin = '1970-01-01', tz = 'GMT') %>%
+    time.numeric.to.posixct %>%
     as.Date %>%
     add(1)
   min.time <-
     min(time) %>%
-    as.POSIXct(origin = '1970-01-01', tz = 'GMT') %>%
+    time.numeric.to.posixct %>%
     as.Date
   time.period <- gsub('-', '.', as.character(c(min.time, max.time)))
   sql.string <- "SELECT time, open FROM %s WHERE time BETWEEN '%s' AND '%s'"
@@ -73,25 +75,38 @@ mysql.price.open <- function(symbol, time, timeframe='M1') {
     extract(j = open)
 } # FINISH
 
-mysql.price.ohlc <- function(symbol, from, to, timeframe='M1') {
+mysql.price.ohlc <- function(symbol, from, to, timeframe='H1', cluster=NULL) {
   # ''' get ohlc from mysql database '''
   # 2017-01-22: Version 1.0
+  from %<>%
+    time.numeric.to.posixct %>%
+    as.Date
+  to %<>%
+    time.numeric.to.posixct %>%
+    as.Date %>%
+    add(1)
+  time.period <- gsub('-', '.', as.character(c(from, to)))
+  if (is.null(cluster) || length(symbol) < 4) {
+    lapply(symbol, mysql.price.ohlc_posixct.time,
+           from = time.period[1], to = time.period[2], timeframe = timeframe)
+  } else {
+    parLapply(cluster, symbol, mysql.price.ohlc_posixct.time,
+              from = time.period[1], to = time.period[2], timeframe = timeframe)
+  }
+}
+
+mysql.price.ohlc_posixct.time <- function(symbol, from, to, timeframe) {
   table <-
     paste(symbol, timeframe, sep = '_') %>%
     tolower
-  
-  
-  from <- gsub('-', '.', as.character(as.Date(.format.time(from))))
-  to <- gsub('-', '.', as.character(as.Date(.format.time(to)) + 1))
   sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
-  sql <- sprintf(sql.string, table, from, to)
-  query.result <- mysql.query(sql)[[1]]
-  time <- as.POSIXct(strptime(query.result$time, '%Y.%m.%d %H:%M', tz = 'GMT'))
-  price <- xts(query.result[2:5], time)
-  colnames(price) <- c('Open', 'High', 'Low', 'Close')
-  price
+  sql <- sprintf(sql.string, table, time.period[1], time.period[2])
+  mysql.query(sql)[[1]] %>%
+    as.data.table %>%
+    extract(j = time := time.char.to.num(time)) %>%
+    setkey(time) %>%
+    extract(i = time.table, roll = 'nearest')
 }
-
 # 
 # #### LOCAL ENVIRONMENT ####
 # init.local.data <- function() {
