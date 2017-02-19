@@ -236,6 +236,6 @@ format.mt4trade.infos.time <- function(time) {
   new_time
 } # FINISH
 
-format.time.numeric.to.posixct <- function(time) {
+time.numeric.to.posixct <- function(time) {
   as.POSIXct(time, origin = '1970-01-01', tz = 'GMT')
 } # FINISH
