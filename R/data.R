@@ -2,14 +2,14 @@ library(compiler)
 compilePKGS(T)
 
 #### @UPDATE IDEA@ ####
-## 2017-02-20: mysql.price.ohlc add parallel method
+## 2017-02-20: mysql.price.open add parallel method
 
 #### @PATCH NOTE@ ####
 ## 2017-02-13: Version 0.2 speed of mysql is good enough, hang-up the local method
 ## 2017-02-13: Version 0.1
 
 MYSQL.SETTING <- list(
-  HOST = '192.168.2.103',
+  HOST = '192.168.2.109',
   PORT = 3306,
   USERNAME = 'root',
   PASSWORD = '',
@@ -21,30 +21,41 @@ DB.O <- function(symbol, time, timeframe='M1') {
   mysql.price.open(symbol, time, timeframe)
 }
 
+DB.OHLC <- function(symbol, from, to, timeframe='H1', cluster=NULL) {
+  mysql.price.ohlc(symbol, from, to, timeframe, cluster)
+}
 
 #### MYSQL ####
-mysql.query <- function(sql, host=MYSQL.SETTING$HOST, port=MYSQL.SETTING$PORT,
-                        username=MYSQL.SETTING$USERNAME, password=MYSQL.SETTING$PASSWORD, dbname=MYSQL.SETTING$DBNAME) {
+mysql.query <- function(sql, host=MYSQL.SETTING$HOST, port=MYSQL.SETTING$PORT, username=MYSQL.SETTING$USERNAME,
+                        password=MYSQL.SETTING$PASSWORD, dbname=MYSQL.SETTING$DBNAME, cluster=NULL) {
   # ''' mysql query '''
   # 2017-01-22: Version 1.0
-  if (length(sql) == 0) {
+  if (!length(sql)) {
     return(NULL)
   }
-  mysql.connect <- tryCatch(
+  mysql.connection <- tryCatch(
     dbConnect(MySQL(), host = host, port = port, username = username, password = password, dbname = dbname),
     error = function(e) {
       message('MySQL Connect ERROR')
       NULL
     }
   )
-  if (is.null(mysql.connect)) {
+  if (is.null(mysql.connection)) {
     return(NULL)
   }
-  res <- lapply(sql, function(s) {
-    dbGetQuery(mysql.connect, s)
-  })
-  dbDisconnect(mysql.connect)
+  res <-
+    if (is.null(cluster) | length(sql) < 4) {
+      lapply(sql, mysql.get.data.table, mysql.connection)
+    } else {
+      parLapply(cluster, sql, mysql.get.data.table, mysql.connection)
+    }
+  dbDisconnect(mysql.connection)
   res
+} # FINISH
+
+mysql.get.data.table <- function(sql, connection) {
+  dbGetQuery(connection, sql) %>%
+    as.data.table
 } # FINISH
 
 mysql.price.open <- function(symbol, time, timeframe='M1') {
@@ -78,6 +89,9 @@ mysql.price.open <- function(symbol, time, timeframe='M1') {
 mysql.price.ohlc <- function(symbol, from, to, timeframe='H1', cluster=NULL) {
   # ''' get ohlc from mysql database '''
   # 2017-01-22: Version 1.0
+  table <-
+    paste(symbol, timeframe, sep = '_') %>%
+    tolower
   from %<>%
     time.numeric.to.posixct %>%
     as.Date
@@ -86,27 +100,17 @@ mysql.price.ohlc <- function(symbol, from, to, timeframe='H1', cluster=NULL) {
     as.Date %>%
     add(1)
   time.period <- gsub('-', '.', as.character(c(from, to)))
-  if (is.null(cluster) || length(symbol) < 4) {
-    lapply(symbol, mysql.price.ohlc_posixct.time,
-           from = time.period[1], to = time.period[2], timeframe = timeframe)
-  } else {
-    parLapply(cluster, symbol, mysql.price.ohlc_posixct.time,
-              from = time.period[1], to = time.period[2], timeframe = timeframe)
-  }
-}
-
-mysql.price.ohlc_posixct.time <- function(symbol, from, to, timeframe) {
-  table <-
-    paste(symbol, timeframe, sep = '_') %>%
-    tolower
   sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
   sql <- sprintf(sql.string, table, time.period[1], time.period[2])
-  mysql.query(sql)[[1]] %>%
-    as.data.table %>%
-    extract(j = time := time.char.to.num(time)) %>%
-    setkey(time) %>%
-    extract(i = time.table, roll = 'nearest')
-}
+  mysql.query(sql) %>%
+    set_names(symbol) %>%
+    lapply(function(price.table) {
+      price.table[j = time := time.char.to.num(time)] %>%
+        setkey(time)
+    })
+} # FINISH
+
+
 # 
 # #### LOCAL ENVIRONMENT ####
 # init.local.data <- function() {

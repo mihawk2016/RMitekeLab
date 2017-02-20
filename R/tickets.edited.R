@@ -17,7 +17,7 @@ tickets.edited <- function(tickets.editing, get.open.fun=DB.O, timeframe='M1', c
       symbol <- SYMBOL[1]
       pip <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
       tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, timeframe, currency, symbols.setting)
-      profit <- cal.profits(VOLUME, tickvalue, pip)
+      profit <- cal.profit(VOLUME, tickvalue, pip)
       list(pip, profitt)
     }, by = SYMBOL) %>%
     extract(j = c('NPROFIT', 'LOT.PROFIT', 'RESULT', 'PERIOD') :=
@@ -28,7 +28,7 @@ tickets.period <- function(tickets.edited) {
   period.from <- min(tickets.edited[, OTIME], na.rm = TRUE)
   period.to <- max(tickets.edited[, CTIME], na.rm = TRUE)
   period.vector <-
-    format.time.numeric.to.posixct(c(period.from, period.to)) %>%
+    time.numeric.to.posixct(c(period.from, period.to)) %>%
     as.Date
   trade.days <-
     seq.Date(from = period.vector[1], to = period.vector[2], by = 'day') %>%
@@ -101,7 +101,7 @@ tickets.statistics.summary <- function(statistics.result) {
                           'VOL/TRADE' = round(sum(VOL.SUM) / sum(N), 2),
                           'PROFIT/TRADE' = round(sum(SUM) / sum(VOL.SUM), 2)
                           )]
-}
+} # FINISH
 
 tickets.statistics.continuous <- function(tickets.edited) {
   nprofit <-
@@ -132,8 +132,57 @@ tickets.statistics.continuous <- function(tickets.edited) {
   con.table[row.name]
 } # FINISH
 
+price.data <- function(tickets.edited, tickets.period, get.ohlc.fun=DB.OHLC, timeframe='H1',
+                       get.open.fun=DB.O, tickvalue.timeframe='M1', currency=DEFAULT.CURRENCY,
+                       symbols.setting=SYMBOLS.SETTING, cluster=NULL) {
+  symbols <-
+    tickets.edited[, SYMBOL] %>%
+    unique
+  time.period <- tickets.period$NATURE.INTERVAL
+  price.data <- get.ohlc.fun(symbols, int_start(time.period), int_end(time.period), timeframe, cluster)
+  serie.columns <- c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING')
+  lapply(symbols, function(symbol) {
+    price.data[[symbol]] %>%
+      extract(j = tick.value := cal.tick.value(symbol, time, get.open.fun, tickvalue.timeframe,
+                                               currency, symbols.setting)) %>%
+      extract(j = (serie.columns) := 0)
+  }) %>%
+    set_names(symbols)
+}
 
+timeseries <- function(tickets.edited, price.data) {
+  tickets.edited[j = ,
+                 by = SYMBOL]
+}
 
+symbol.tickets.timeseries <- function(symbol.tickets.edited, symbol.price.data) {
+  symbol.tickets.edited[]
+}
+
+ticket.timeseries <- function(otime, ctime, nprofit, type, volume,
+                              oprice, digit, spread, symbol.price.data) {
+  price.data <-
+    copy(symbol.price.data) %>%
+    extract(which.min(time >= ctime), PROFIT := nprofit) %>%
+    extract(time >= otime & time < ctime,
+            c('FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING' ) := {
+              digit.factor <- 10 ^ digit
+              if (type == BUY) {
+                pl.volume <- volume
+                floating.pip <- (open - oprice) * digit.factor
+                max.floating.pip <- (high - oprice) * digit.factor
+                min.floating.pip <- (low - oprice) * digit.factor
+              } else {
+                pl.volume <- -volume
+                floating.pip <- (oprice - open) * digit.factor - spread
+                max.floating.pip <- (oprice - open) * digit.factor - spread
+                min.floating.pip <- (oprice - open) * digit.factor - spread
+              }
+              list(cal.profit(volume, tick.value, floating.pip), pl.volume, volume,
+                   cal.profit(volume, tick.value, max.floating.pip),
+                   cal.profit(volume, tick.value, min.floating.pip))
+            })
+}
 #### UTILS ####
 cal.continuous <- function(x) {
   if (!(len <- length(x))) {
