@@ -51,41 +51,47 @@ tickets.statistics <- function(tickets.edited) {
 }
 
 tickets.statistics.by.result <- function(tickets.edited) {
-  tickets.edited[j = .(N = .N,
-                       SUM = sum(NPROFIT),
-                       MEAN = round(mean(NPROFIT), 2),
-                       MAX = ifelse(sign(NPROFIT[1]) == -1, min(NPROFIT), max(NPROFIT)),
-                       PIP.SUM = sum(PIP),
-                       PIP.MEAN = round(mean(PIP), 2),
-                       PIP.MAX = ifelse(sign(PIP[1]) == -1, min(PIP), max(PIP)),
-                       VOL.SUM = sum(VOLUME),
-                       VOL.MEAN = round(mean(VOLUME), 2),
-                       VOL.MAX = ifelse(sign(VOLUME[1]) == -1, min(VOLUME), max(VOLUME)),
-                       VOL.MIN = ifelse(sign(VOLUME[1]) == -1, max(VOLUME), min(VOLUME))
-                       ),
-                 by = RESULT] %>%
+  tickets.edited %>%
     setkey(RESULT) %>%
+    extract(
+      j = .(N = .N,
+            SUM = sum(NPROFIT),
+            MEAN = round(mean(NPROFIT), 2),
+            MAX = ifelse(sign(NPROFIT[1]) == -1, min(NPROFIT), max(NPROFIT)),
+            PIP.SUM = sum(PIP),
+            PIP.MEAN = round(mean(PIP), 2),
+            PIP.MAX = ifelse(sign(PIP[1]) == -1, min(PIP), max(PIP)),
+            VOL.SUM = sum(VOLUME),
+            VOL.MEAN = round(mean(VOLUME), 2),
+            VOL.MAX = ifelse(sign(VOLUME[1]) == -1, min(VOLUME), max(VOLUME)),
+            VOL.MIN = ifelse(sign(VOLUME[1]) == -1, max(VOLUME), min(VOLUME))
+    ),
+    by = RESULT) %>%
     extract(c('PROFIT', 'LOSS')) %>%
     extract(is.na(N), 2:ncol(.) := list(0))
 } # FINISH
 
 tickets.statistics.by.exit <- function(tickets.edited) {
-  tickets.edited[i = !is.na(EXIT),
-                 j = .(N = .N,
-                       NPROFIT = sum(NPROFIT)
-                       ),
-                 by = EXIT] %>%
+  tickets.edited %>%
     setkey(EXIT) %>%
+    extract(
+      i = !is.na(EXIT),
+      j = .(N = .N,
+            NPROFIT = sum(NPROFIT)
+            ),
+      by = EXIT) %>%
     extract(c('SL', 'TP', 'SO')) %>%
     extract(is.na(N), 2:ncol(.) := list(0))
 } # FINISH
 
 tickets.statistics.by.type <- function(tickets.edited) {
-  tickets.edited[j = .(N = .N,
-                       NVOLUME = sum(VOLUME)
-                 ),
-                 by = TYPE] %>%
+  tickets.edited %>%
     setkey(TYPE) %>%
+    extract(
+      j = .(N = .N,
+            NVOLUME = sum(VOLUME)
+      ),
+      by = TYPE) %>%
     extract(c('BUY', 'SELL')) %>%
     extract(is.na(N), 2:ncol(.) := list(0))
 } # FINISH
@@ -150,38 +156,61 @@ price.data <- function(tickets.edited, tickets.period, get.ohlc.fun=DB.OHLC, tim
     set_names(symbols)
 }
 
-timeseries <- function(tickets.edited, price.data) {
-  tickets.edited[j = ,
-                 by = SYMBOL]
+timeseries <- function(tickets.edited, price.data, symbols.setting=SYMBOLS.SETTING) {
+  fun.env <- environment()
+  env.tickets.series <- list()
+  symbols <-
+    tickets.edited %>%
+    setkey(SYMBOL) %>%
+    extract(
+      j = {
+        symbol <- SYMBOL[1]
+        timeserie <-
+          mapply(timeseries.symbol.ticket, OTIME, CTIME, NPROFIT, TYPE, VOLUME, OPRICE,
+                 MoreArgs = list(symbols.setting[symbol, DIGITS], symbols.setting[symbol, SPREAD],
+                                 price.data[[symbol]]),
+                 SIMPLIFY = FALSE) %>%
+          set_names(paste('T', TICKET, sep = '_')) %>%
+          list %>%
+          append(env.tickets.series, .) %>%
+          assign('env.tickets.series', ., envir = fun.env)
+        NA
+      },
+      by = SYMBOL
+    ) %>%
+    extract(j = SYMBOL)
+  setNames(env.tickets.series, symbols)
 }
 
 symbol.tickets.timeseries <- function(symbol.tickets.edited, symbol.price.data) {
-  symbol.tickets.edited[]
+  # symbol.tickets.edited[]
 }
 
-ticket.timeseries <- function(otime, ctime, nprofit, type, volume,
-                              oprice, digit, spread, symbol.price.data) {
-  price.data <-
-    copy(symbol.price.data) %>%
-    extract(which.min(time >= ctime), PROFIT := nprofit) %>%
-    extract(time >= otime & time < ctime,
-            c('FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING' ) := {
-              digit.factor <- 10 ^ digit
-              if (type == BUY) {
-                pl.volume <- volume
-                floating.pip <- (open - oprice) * digit.factor
-                max.floating.pip <- (high - oprice) * digit.factor
-                min.floating.pip <- (low - oprice) * digit.factor
-              } else {
-                pl.volume <- -volume
-                floating.pip <- (oprice - open) * digit.factor - spread
-                max.floating.pip <- (oprice - open) * digit.factor - spread
-                min.floating.pip <- (oprice - open) * digit.factor - spread
-              }
-              list(cal.profit(volume, tick.value, floating.pip), pl.volume, volume,
-                   cal.profit(volume, tick.value, max.floating.pip),
-                   cal.profit(volume, tick.value, min.floating.pip))
-            })
+timeseries.symbol.ticket <- function(otime, ctime, nprofit, type, volume,
+                                     oprice, digit, spread, symbol.price.data) {
+  copy(symbol.price.data) %>%
+    setkey(time) %>%
+    extract(which(time >= ctime)[1], PROFIT := nprofit) %>%
+    extract(
+      i = time >= otime & time < ctime,
+      j = c('FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING' ) := {
+        digit.factor <- 10 ^ digit
+        if (type == 'BUY') {
+          pl.volume <- volume
+          floating.pip <- (open - oprice) * digit.factor
+          max.floating.pip <- (high - oprice) * digit.factor
+          min.floating.pip <- (low - oprice) * digit.factor
+        } else {
+          pl.volume <- -volume
+          floating.pip <- (oprice - open) * digit.factor - spread
+          max.floating.pip <- (oprice - low) * digit.factor - spread
+          min.floating.pip <- (oprice - high) * digit.factor - spread
+        }
+        list(cal.profit(volume, tick.value, floating.pip), pl.volume, volume,
+             cal.profit(volume, tick.value, max.floating.pip),
+             cal.profit(volume, tick.value, min.floating.pip))
+      }
+    )
 }
 #### UTILS ####
 cal.continuous <- function(x) {
