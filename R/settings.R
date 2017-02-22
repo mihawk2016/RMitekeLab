@@ -14,6 +14,10 @@ compilePKGS(T)
 #                'MT4M-CLOSED' = 'Closed Trades Report',
 #                'MT4M-RAW' = 'Raw Report')
 
+#### PARALLEL THRESHOLD ####
+PARALLEL.THRESHOLD.READ.FILES <- 200
+
+
 #### SYMBOLS SETTING ####
 SYMBOLS.SETTING <-
   data.table(

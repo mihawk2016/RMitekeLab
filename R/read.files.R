@@ -9,7 +9,7 @@ compilePKGS(T)
 ## 2017-02-22: Version 0.2 loose coupling for environment
 ## 2017-02-05: Version 0.1
 
-read.mq.file <- function(mq.files, cluster=FALSE) {
+read.mq.file <- function(mq.files, parallel=PARALLEL.THRESHOLD.READ.FILES) {
   # ''' read mq files (V) '''
   # @param mq.files: MetaQuote files.
   # @return:
@@ -24,14 +24,17 @@ read.mq.file <- function(mq.files, cluster=FALSE) {
   } else {
     mq.names <- basename(mq.files)
   }
-  if (!cluster) {
-    mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
+  if (is.numeric(parallel)) {
+    parallel <- length(mq.files) >= parallel
+  }
+  if (!parallel) {
+    fetched.data <- mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
   } else {
     cluster <- makeCluster(detectCores() - 1)
-    res <- clusterMap(cluster, fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
+    fetched.data <- clusterMap(cluster, fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
     stopCluster(cluster)
-    res
   }
+  fetched.data
 } # FINISH
 
 fetch.file.data <- function(mq.file, mq.file.name) {

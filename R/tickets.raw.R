@@ -61,28 +61,43 @@ build.tickets.raw <- function() {
   tickets
 }
 
-fetch.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
-  tickets.raw <- get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC)[[index]]
-  if (!is.null(tickets.raw)) {
-    return(tickets.raw)
-  }
-  infos <- get.infos(index)[[1]]
-  type <- infos$TYPE
-  file <- infos$PATH
-  parse <- get.html.parse(index)[[1]]
+# fetch.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
+#   tickets.raw <- get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC)[[index]]
+#   if (!is.null(tickets.raw)) {
+#     return(tickets.raw)
+#   }
+#   infos <- get.infos(index)[[1]]
+#   type <- infos$TYPE
+#   file <- infos$PATH
+#   parse <- get.html.parse(index)[[1]]
+#   suppressWarnings({
+#     switch(
+#       type,
+#       'MT4-EA' = fetch.html.data.tickets.mt4ea(file, parse, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+#       'MT4-Trade' = fetch.html.data.tickets.mt4trade(file, parse),
+#       'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+#       'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+#       'MT4M-Closed' = fetch.html.data.tickets.mt4m_closed(file),
+#       'MT4M-Raw' = fetch.html.data.tickets.mt4m_raw(file)
+#     )
+#   })
+#   append.to.tickets.raw(index)
+# } # FINISH
+
+fetch.tickets.raw <- function(file, parse, currency, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   suppressWarnings({
     switch(
       type,
-      'MT4-EA' = fetch.html.data.tickets.mt4ea(file, parse, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+      'MT4-EA' = fetch.html.data.tickets.mt4ea(file, parse, get.open.fun, timeframe, currency, symbols.setting),
       'MT4-Trade' = fetch.html.data.tickets.mt4trade(file, parse),
-      'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
-      'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
+      'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, timeframe, currency, symbols.setting),
+      'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, timeframe, currency, symbols.setting),
       'MT4M-Closed' = fetch.html.data.tickets.mt4m_closed(file),
       'MT4M-Raw' = fetch.html.data.tickets.mt4m_raw(file)
     )
   })
-  append.to.tickets.raw(index)
 } # FINISH
+
 
 #### FETCH TICKETS ####
 fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, timeframe='M1',
