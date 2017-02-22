@@ -28,10 +28,10 @@ read.mq.file <- function(mq.files, parallel=PARALLEL.THRESHOLD.READ.FILES) {
     parallel <- length(mq.files) >= parallel
   }
   if (!parallel) {
-    fetched.data <- mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
+    fetched.data <- mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE, USE.NAMES = FALSE)
   } else {
     cluster <- makeCluster(detectCores() - 1)
-    fetched.data <- clusterMap(cluster, fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
+    fetched.data <- clusterMap(cluster, fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE, USE.NAMES = FALSE)
     stopCluster(cluster)
   }
   fetched.data
@@ -60,8 +60,8 @@ fetch.file.data <- function(mq.file, mq.file.name) {
   } else {
     within(data, {
       INFOS %<>%
-        extract(j = FILE := mq.file.name) %>%
-        setattr('PATH', mq.file)
+        extract(j = FILE := mq.file.name)
+      PATH <- mq.file
     })
   }
 }

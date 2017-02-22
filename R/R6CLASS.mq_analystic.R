@@ -20,25 +20,58 @@ MQ_ANALYSTIC <- R6Class(
       mismatch.index <-
         sapply(files.data, is.character) %>% which
       if (length(mismatch.index)) {
-        self$append('m.mismatch', unlist(files.data[mismatch.index]))
-        self$append('m.infos', lapply(files.data[-mismatch.index], function(file.data) file.data$INFOS))
-        self$append('m.html.parse', lapply(files.data[-mismatch.index], function(file.data) file.data$HTML.PARSE))
+        self$append('mismatch', unlist(files.data[mismatch.index]))
+        self$append('report', files.data[-mismatch.index])
       } else {
-        self$append('m.infos', lapply(files.data, function(file.data) file.data$INFOS))
-        self$append('m.html.parse', lapply(files.data, function(file.data) file.data$HTML.PARSE))
+        self$append('report', files.data)
       }
     },
     clear.files = function() {
-      
+      private$mismatch <- c()
+      private$report <- list()
+      private$merged.report <- NULL
     },
     
     
     #### GETTER & SETTER ####
-    get = function(member) {
-      private[[member]]
+    get.report = function(member, index) {
+      if (missing(index)) {
+        index <- 1:length(private$report)
+      }
+      if (missing(member)) {
+        return(private$report[index])
+      }
+      if (length(member) == 1) {
+        lapply(private$report[index], function(r) r[[member]])
+      } else {
+        lapply(private$report[index], function(r) r[member])
+      }
     },
-    set = function(member, value) {
-      private[[member]] <- value
+    set.report = function(member, index, value) {
+      if (missing(index)) {
+        index <- 1:length(private$report)
+      }
+      if (missing(member)) {
+        return(private$report[index] <- value)
+      }
+      private$report[index] <-
+        mapply(function(r, m, v) {
+          r %>% inset(m, v)
+        }, r = private$report[index], v = value, MoreArgs = list(m = member))
+    },
+    get.merged.data = function(member) {
+      if (missing) {
+        private$merged.data
+      } else {
+        private$merged.data[[member]]
+      }
+    },
+    set.merged.data = function(member, value) {
+      if (missing) {
+        private$merged.data
+      } else {
+        private$merged.data[[member]] <- value 
+      }
     },
     append = function(member, value) {
       private[[member]] %<>% c(value)
@@ -46,8 +79,8 @@ MQ_ANALYSTIC <- R6Class(
   ),
   private = list(
     setting.parallel.threshold.read.files = NULL,
-    m.mismatch = c(),
-    m.infos = list(),
-    m.html.parse = list()
+    mismatch = c(),
+    report = list(),
+    merged.report = NULL
   )
 )
