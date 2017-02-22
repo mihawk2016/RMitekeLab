@@ -23,9 +23,9 @@ TICKETS.COLUMNS <- list(
 
 
 #### TICKETS ENVIRONMENT ####
-# init.tickets.raw <- function() {
-#   assign('TICKETS.RAW', list(), envir = METAQUOTE.ANALYSTIC)
-# }
+init.tickets.raw <- function() {
+  assign('TICKETS.RAW', list(), envir = METAQUOTE.ANALYSTIC)
+}
 
 init.tickets.temp <- function() {
   assign('TICKETS.TEMP', list(), envir = METAQUOTE.ANALYSTIC)
@@ -35,30 +35,30 @@ get.tickets.temp <- function() {
   get('TICKETS.TEMP', envir = METAQUOTE.ANALYSTIC)
 }
 
-# get.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING, cluster=NULL) {
-#   if (missing(index)) {
-#     index <- 1:length(get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC))
-#   }
-#   if (is.null(cluster) || length(index) < 4) {
-#     lapply(index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
-#   } else {
-#     parLapplyLB(cluster, index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
-#   }
-# }
+get.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING, cluster=NULL) {
+  if (missing(index)) {
+    index <- 1:length(get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC))
+  }
+  if (is.null(cluster) || length(index) < 4) {
+    lapply(index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
+  } else {
+    parLapplyLB(cluster, index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
+}
+}
 
 append.to.tickets.temp <- function(tickets) {
   METAQUOTE.ANALYSTIC$TICKETS.TEMP %<>%
     c(list(tickets))
 } # FINISH
 
-build.tickets.raw <- function() {
+append.to.tickets.raw <- function(index) {
   tickets <-
     get.tickets.temp() %>%
     rbindlist(use.names = TRUE) %>%
     setcolorder(TICKETS.COLUMNS$UNIFORM) %>%
-    setkey(CTIME)
+    setkey(CTIME)#### ToDo: more to do, like 'format' & 'sort' ####
   init.tickets.temp()
-  tickets
+  METAQUOTE.ANALYSTIC$TICKETS.RAW[[index]] <- tickets
 }
 
 fetch.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
@@ -176,7 +176,6 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
     }
     build.tickets(closed.tickets, 'CLOSED')
   }
-  build.tickets.raw()
 } # FINISH
 
 fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
@@ -218,7 +217,6 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
     build.tickets('PENDING')
   table[.(5), nomatch = 0] %>%
     build.tickets('WORKING')
-  build.tickets.raw()
 } # FINISH
 
 fetch.html.data.tickets.mt5ea <- function(mq.file, get.open.fun, timeframe, currency, symbols.setting) {
@@ -233,8 +231,7 @@ fetch.html.data.tickets.mt5ea <- function(mq.file, get.open.fun, timeframe, curr
     html.data.mt5.pending
   blocks$Deals %>%
     html.data.mt5.money_closed_open(get.open.fun, timeframe, currency, symbols.setting)
-  build.tickets.raw()
-} # FINISH
+}
 
 fetch.html.data.tickets.mt5trade <- function(mq.file, get.open.fun, timeframe, currency, symbols.setting) {
   ## 13 columns 
@@ -260,8 +257,7 @@ fetch.html.data.tickets.mt5trade <- function(mq.file, get.open.fun, timeframe, c
     build.tickets('WORKING')
   blocks$Deals %>%
     html.data.mt5.money_closed_open(get.open.fun, timeframe, currency, symbols.setting, cprices)
-  build.tickets.raw()
-} # FINISH
+}
 
 html.data.mt5.pending <- function(orders.table) {
   orders.table %>%
@@ -290,7 +286,7 @@ html.data.mt5.money_closed_open <- function(deals.table, get.open.fun, timeframe
               html.data.mt5.symbol.closed_open(.SD, ITEM, cprices[ITEM], get.open.fun,
                                                timeframe, currency, symbols.setting),
               by = ITEM]
-} # FINISH
+}
 
 html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item, cprice, get.open.fun,
                                              timeframe, currency, symbols.setting) {
@@ -344,7 +340,7 @@ html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item, cprice,
                                                    timeframe, currency, symbols.setting)
   }
   NULL
-} # FINISH
+}
 
 html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part, cprice,
                                                            get.open.fun, timeframe, currency, symbols.setting) {
@@ -423,7 +419,6 @@ fetch.html.data.tickets.mt4m_closed <- function(mq.file) {
     set_colnames(c('TICKET', 'OTIME', 'TYPE', 'ITEM', 'VOLUME', 'OPRICE', 'CTIME',
                    'CPRICE', 'COMMISSION', 'TAXES', 'SWAP', 'PROFIT', 'COMMENT')) %>%
     build.tickets('CLOSED')
-  build.tickets.raw()
 } # FINISH
 
 fetch.html.data.tickets.mt4m_raw <- function(mq.file) {
@@ -446,7 +441,6 @@ fetch.html.data.tickets.mt4m_raw <- function(mq.file) {
     build.tickets('PENDING')
   table[c('BUY', 'SELL')] %>%
     build.tickets('CLOSED')
-  build.tickets.raw()
 } # FINISH
 
 #### FORMAT COLCLASSES ####
@@ -460,11 +454,11 @@ time.char.to.num <- function(time.char) {
   new.time[index.16] <- ymd_hm(time.char[index.16], tz = 'GMT')
   new.time[index.10] <- ymd(time.char[index.10], tz = 'GMT')
   as.numeric(new.time)
-} # FINISH
+}
 
 num.char.to.num <- function(num.char) {
   as.numeric(gsub(' ', '', num.char))
-} # FINISH
+}
 
 # #### UTILS ####
 # bind.comment.and.login <- function(comment, login) {

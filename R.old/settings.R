@@ -6,13 +6,7 @@ compilePKGS(T)
 ## 2017-02-05: Version 0.1
 
 
-# #### FILE TYPE ####
-# FILE.TYPES <- c('MT4-EA' = 'Strategy Tester:',
-#                'MT4-TRADE' = 'Statement:',
-#                'MT5-EA' = 'Strategy Tester Report',
-#                'MT5-TRADE' = 'Trade History Report',
-#                'MT4M-CLOSED' = 'Closed Trades Report',
-#                'MT4M-RAW' = 'Raw Report')
+
 
 #### SYMBOLS SETTING ####
 SYMBOLS.SETTING <-

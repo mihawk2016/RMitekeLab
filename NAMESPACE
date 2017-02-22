@@ -1,11 +1,13 @@
 import(magrittr)
-# import(lubridate)
+import(parallel)
 import(RMySQL)
 import(data.table)
 import(xml2)
+importFrom(DBI, dbGetQuery)
 importFrom(stringr, str_detect)
 importFrom(XML, readHTMLTable)
-importFrom(lubridate, ymd_hms, ymd_hm, ymd, interval, as.period)
+importFrom(lubridate, ymd_hms, ymd_hm, ymd, interval, as.period, int_start, int_end)
 importFrom(zoo, na.locf)
 
 exportPattern("^[[:alpha:]]+")
+
