@@ -65,7 +65,7 @@ MQ_ANALYSTIC <- R6Class(
         }
       }
       if (any(member %in% c('TICKETS.ANALYSING'))) {
-        tickets.supported <- self$get.tickets('TICKETS.SUPPORTED', index)
+        tickets.editing <- self$get.tickets('TICKETS.SUPPORTED', index)
         
       }
       return(private$get.report.simple(member, index))
