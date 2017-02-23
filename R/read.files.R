@@ -2,6 +2,7 @@ library(compiler)
 compilePKGS(T)
 
 #### @UPDATE IDEA@ ####
+## 2017-02-23: MT4-EA/Trade raw tickets code optimize, parse data earlier catch.
 ## 2017-02-16: @DONE loose coupling for environment
 ## 2017-02-16: @DONE parallel problem, they should just return values
 

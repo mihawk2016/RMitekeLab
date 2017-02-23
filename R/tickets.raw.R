@@ -44,7 +44,7 @@ build.tickets.raw <- function() {
   tickets
 }
 
-generate.html.tickets <- function(file, parse, infos,
+generate.html.tickets <- function(file, parse, infos, index,
                                   default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
                                   get.open.fun=DB.O, mysql.setting=MYSQL.SETTING,
                                   timeframe='M1', symbols.setting=SYMBOLS.SETTING,
@@ -53,19 +53,20 @@ generate.html.tickets <- function(file, parse, infos,
     parallel <- length(file) >= parallel
   }
   if (!parallel) {
-    mapply(fetch.html.tickets, file, parse, infos,
-           MoreArgs = list(default.currency, default.leverage, get.open.fun, mysql.setting,
-                           timeframe, symbols.setting), SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    phase2data <- mapply(fetch.html.tickets, file, parse, infos, index,
+                         MoreArgs = list(default.currency, default.leverage, get.open.fun, mysql.setting,
+                                         timeframe, symbols.setting), SIMPLIFY = FALSE, USE.NAMES = FALSE)
   } else {
     cluster <- makeCluster(detectCores() - 1)
-    clusterMap(cluster, fetch.html.tickets, file, parse, infos,
-               MoreArgs = list(default.currency, default.leverage, get.open.fun, mysql.setting,
-                               timeframe, symbols.setting), SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    phase2data <- clusterMap(cluster, fetch.html.tickets, file, parse, infos, index,
+                             MoreArgs = list(default.currency, default.leverage, get.open.fun, mysql.setting,
+                                             timeframe, symbols.setting), SIMPLIFY = FALSE, USE.NAMES = FALSE)
     stopCluster(cluster)
   }
+  phase2data
 }
 
-generate.html.tickets2 <- function(report,
+generate.html.tickets2 <- function(report, index,
                                    default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE, get.open.fun=DB.O,
                                    mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING,
                                    parallel=PARALLEL.THRESHOLD.GENERATE.TICKETS) {
@@ -73,17 +74,21 @@ generate.html.tickets2 <- function(report,
     parallel <- length(report) >= parallel
   }
   if (!parallel) {
-    lapply(report, fetch.html.tickets2, default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)
+    phase2data <- mapply(fetch.html.tickets2, report, index,
+                         MoreArgs = list(default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting),
+                         SIMPLIFY = FALSE, USE.NAMES = FALSE)
   } else {
     cluster <- makeCluster(detectCores() - 1)
-    
-    parLapply(cluster, report, fetch.html.tickets2, default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)
+    phase2data <- clusterMap(cluster, fetch.html.tickets2, report, index,
+                             MoreArgs = list(default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting),
+                             SIMPLIFY = FALSE, USE.NAMES = FALSE)
     stopCluster(cluster)
   }
+  phase2data
 }
 
 #### FETCH TICKETS ####
-fetch.html.tickets <- function(file, parse, infos, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
+fetch.html.tickets <- function(file, parse, infos, index, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
                                get.open.fun=DB.O, mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   within(list(
     PATH = file,
@@ -92,7 +97,8 @@ fetch.html.tickets <- function(file, parse, infos, default.currency=DEFAULT.CURR
   ), {
     CURRENCY <- report.currency(infos, default.currency)
     LEVERAGE <- report.leverage(infos, default.leverage)
-    TICKETS.RAW <- tickets.raw(infos[, TYPE], file, parse, CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting)
+    TICKETS.RAW <- tickets.raw(infos[, TYPE], file, parse, CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting)%>%
+      extract(j = FILE := index)
     ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
     SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
     UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
@@ -100,28 +106,19 @@ fetch.html.tickets <- function(file, parse, infos, default.currency=DEFAULT.CURR
   })
 }
 
-fetch.html.tickets2 <- function(report, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
+fetch.html.tickets2 <- function(report, index, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
                                 get.open.fun=DB.O, mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   within(report, {
     CURRENCY <- report.currency(report$INFOS, default.currency)
     LEVERAGE <- report.leverage(report$INFOS, default.leverage)
     TICKETS.RAW <- tickets.raw(report$INFOS[, TYPE], report$PATH, report$HTML.PARSE,
-                               CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting)
+                               CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting) %>%
+      extract(j = FILE.INDEX := index)
     ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
     SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
     UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
     TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING)
   })
-
-  # report$CURRENCY <- report.currency(report$INFOS, default.currency)
-  # report$LEVERAGE <- report.leverage(report$INFOS, default.leverage)
-  # report$TICKETS.RAW <- tickets.raw(report$INFOS[, TYPE], report$PATH, report$HTML.PARSE,
-  #                                   report$CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting)
-  # report$ITEM.SYMBOL.MAPPING <- item.symbol.mapping(report$TICKETS.RAW, symbols.setting[, SYMBOL])
-  # report$SUPPORTED.ITEM <- supported.items(report$ITEM.SYMBOL.MAPPING)
-  # report$UNSUPPORTED.ITEM <- unsupported.items(report$ITEM.SYMBOL.MAPPING)
-  # report$TICKETS.SUPPORTED <- tickets.supported(report$TICKETS.RAW, report$ITEM.SYMBOL.MAPPING)
-
 }
 
 tickets.raw <- function(type, file, parse, currency, get.open.fun=DB.O, mysql.setting=MYSQL.SETTING,
@@ -140,6 +137,104 @@ tickets.raw <- function(type, file, parse, currency, get.open.fun=DB.O, mysql.se
 } # FINISH
 
 #### FETCH TICKETS ####
+# fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, mysql.setting, timeframe='M1',
+#                                           currency, symbols.setting=SYMBOLS.SETTING) {
+#   table <-
+#     readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2,
+#                   colClasses = c('character', time.char.to.num, 'character', num.char.to.num, num.char.to.num,
+#                                  num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character')) %>%
+#     as.data.table %>%
+#     set_colnames(c('deal', 'time', 'type', 'ticket', 'volume', 'price', 'sl', 'tp', 'profit', 'balance')) %>%
+#     extract(type != 'modify', -c('deal', 'balance'))
+#   mq.file.parse <- read_html(mq.file, encoding = 'GBK')
+#   xml.text <-
+#     xml_find_first(mq.file.parse, './/table')
+    # mq.file.parse %>%
+    # xml_find_first('.//table') %>%
+    # xml_find_all('.//td') %>%
+    # xml_text
+  # deposit <-
+  #   xml.text %>%
+  #   extract(24) %>%
+  #   as.numeric
+  # time.string <- xml.text[4]
+  # len.time.string <- nchar(time.string)
+  # deposit.time <-
+  #   time.string %>%
+  #   substr(len.time.string - 23, len.time.string - 14) %>%
+  #   format.time.all.to.numeric
+  # end.time <-
+  #   time.string %>%
+  #   substr(len.time.string - 10, len.time.string - 1) %>%
+  #   format.time.all.to.numeric
+  # money.tickets <-
+  #   data.table(
+  #     TICKET = 0,
+  #     OTIME = 13,
+  #     PROFIT = 100,
+  #     GROUP = 'MONEY'
+  #   )
+  #   ) %>%
+  #   build.tickets('MONEY')
+  # rows <- nrow(table)
+  # if (!rows) {
+  #   return(money.tickets)
+  # }
+  # item <-
+  #   xml.text %>%
+  #   extract(2) %>%
+  #   gsub(' ([ \\(\\)[:alpha:]])*', '', .)
+  # table.index <- 1:rows
+  # table.types <- table[, type]
+  # table.tickets <- table[, ticket]
+  # pending.close.part.index <- which(table.types == 'delete')
+  # if (length(pending.close.part.index)) {
+  #   pending.tickets.ticket <- table.tickets[pending.close.part.index]
+  #   table.index %<>% setdiff(pending.close.part.index)
+  #   pending.open.part.index <- table.index[table.tickets[table.index] %in% pending.tickets.ticket]
+  #   table.index %<>% setdiff(pending.open.part.index)
+  #   merge(table[pending.open.part.index], table[pending.close.part.index], by = 'ticket') %>%
+  #     set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
+  #                    'CTIME', '', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
+  #     extract(j = (c('ITEM', 'COMMENT', 'TYPE')) := list(item, 'canceled', toupper(TYPE))) %>%
+  #     build.tickets('PENDING')
+  # }
+  # pending.of.closed.ticktets.index <- table.index[grepl('(buy|sell) (limit|stop)', table.types[table.index], ignore.case = TRUE)]
+  # if (length(pending.of.closed.ticktets.index) ) {
+  #   table.index %<>% setdiff(pending.of.closed.ticktets.index)
+  # }
+  # if (length(table.index)) {
+  #   closed.tickets.open.part.index <- table.index[grepl('(buy|sell)', table.types[table.index], ignore.case = TRUE)]
+  #   closed.tickets.close.part.index <- table.index %<>% setdiff(closed.tickets.open.part.index)
+  #   closed.tickets <- merge(table[closed.tickets.open.part.index], table[closed.tickets.close.part.index], by = 'ticket')
+  #   part.closed.index <- which(closed.tickets[, volume.x != volume.y])
+  #   if (length(part.closed.index)) {
+  #     closed.tickets[part.closed.index, volume.x := volume.y]
+  #     closed.tickets[part.closed.index + 1, time.x := NA]
+  #     closed.tickets[, time.x := na.locf(time.x)]
+  #   }
+  #   closed.tickets %<>%
+  #     set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
+  #                    'CTIME', 'COMMENT', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
+  #     extract(j = c('ITEM', 'TYPE') := list(item, toupper(TYPE))) %>%
+  #     extract(CTIME >= end.time - 60 & COMMENT == 'close at stop', EXIT := paste(COMMENT, 'so', sep = ' / '))
+  #   symbol <- item.to.symbol(item)
+  #   if (!is.na(symbol)) {
+  #     if (is.na(currency)) {
+  #       currency <- DEFAULT.CURRENCY
+  #     }
+  #     closed.tickets[, c('SWAP', 'PROFIT') := {
+  #       pips <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
+  #       tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, mysql.setting, timeframe, currency, symbols.setting)
+  #       new.profit <- cal.profit(VOLUME, tickvalue, pips)
+  #       list(PROFIT - new.profit, new.profit)
+  #     }]
+  #   }
+  #   build.tickets(closed.tickets, 'CLOSED')
+  # }
+  # build.tickets.raw()
+# } # FINISH
+
 fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, mysql.setting, timeframe='M1',
                                           currency, symbols.setting=SYMBOLS.SETTING) {
   table <-
@@ -149,11 +244,12 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
     as.data.table %>%
     set_colnames(c('deal', 'time', 'type', 'ticket', 'volume', 'price', 'sl', 'tp', 'profit', 'balance')) %>%
     extract(type != 'modify', -c('deal', 'balance'))
+  mq.file.parse <- read_html(mq.file, encoding = 'GBK') #### just for parallel, fix later ####
   xml.text <-
     mq.file.parse %>%
     xml_find_first('.//table') %>%
-    xml_find_all('.//td') %>%
-    xml_text
+  xml_find_all('.//td') %>%
+  xml_text
   deposit <-
     xml.text %>%
     extract(24) %>%
@@ -241,6 +337,7 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
                                  num.char.to.num, num.char.to.num, num.char.to.num, time.char.to.num,
                                  num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num)) %>%
     as.data.table
+  mq.file.parse <- read_html(mq.file, encoding = 'GBK') #### just for parallel, fix later ####
   ticket.index <-
     table[j = V1] %>%
     is.na %>%

@@ -18,6 +18,7 @@ MQ_ANALYSTIC <- R6Class(
       private$DB.OPEN.FUN <- DB.O
       private$DB.OHLC.FUN <- DB.OHLC
     },
+    #### ACTIONS ####
     add.files = function(files, parallel=private$PARALLEL.THRESHOLD.READ.FILES) {
       files.data <- read.mq.file(files, parallel)
       mismatch.index <-
@@ -30,11 +31,14 @@ MQ_ANALYSTIC <- R6Class(
       }
     },
     clear.files = function() {
+      private$selected.index = c()
       private$mismatch <- c()
       private$report <- list()
       private$merged.report <- NULL
     },
-    
+    build.focus = function() {
+      
+    },
     
     #### GETTER & SETTER ####
     get.report = function(member, index,
@@ -44,8 +48,7 @@ MQ_ANALYSTIC <- R6Class(
                           mysql.setting=private$MYSQL.SETTING,
                           timeframe=private$TIMEFRAME.TICKVALUE,
                           symbols.setting=private$SYMBOLS.SETTING,
-                          parallel=FALSE) {
-                          # parallel=private$PARALLEL.THRESHOLD.GENERATE.TICKETS) {
+                          parallel=private$PARALLEL.THRESHOLD.GENERATE.TICKETS) {
       if (missing(index)) {
         index <- 1:length(private$report)
       }
@@ -59,12 +62,8 @@ MQ_ANALYSTIC <- R6Class(
         null.sub.index <- sapply(private$report[index], function(r) is.null(r$CURRENCY)) %>% which
         if (length(null.sub.index)) {
           null.index <- index[null.sub.index]
-          new.report <- generate.html.tickets2(private$report[null.index], default.currency, default.leverage,
+          new.report <- generate.html.tickets2(private$report[null.index], null.index, default.currency, default.leverage,
                                                get.open.fun, mysql.setting, timeframe, symbols.setting, parallel)
-          # new.report <- generate.html.tickets(private$get.report.simple('PATH', null.index),
-          #                                     private$get.report.simple('HTML.PARSE', null.index),
-          #                                     private$get.report.simple('INFOS', null.index), default.currency, default.leverage,
-          #                                     get.open.fun, mysql.setting, timeframe, symbols.setting, parallel)
           self$set.report(index = null.index, value = new.report)
         }
       }
@@ -82,19 +81,25 @@ MQ_ANALYSTIC <- R6Class(
           r %>% inset(m, v)
         }, r = private$report[index], v = value, MoreArgs = list(m = member))
     },
-    get.merged.data = function(member) {
+    get.focus = function(member) {
       if (missing) {
-        private$merged.data
+        private$focus.report
       } else {
-        private$merged.data[[member]]
+        private$focus.report[[member]]
       }
     },
-    set.merged.data = function(member, value) {
+    set.focus = function(member, value) {
       if (missing) {
-        private$merged.data
+        private$focus.report
       } else {
-        private$merged.data[[member]] <- value 
+        private$focus.report[[member]] <- value 
       }
+    },
+    get = function(member) {
+      private[[member]]
+    },
+    set = function(member, value) {
+      private[[member]] <- value
     },
     append = function(member, value) {
       private[[member]] %<>% c(value)
@@ -111,9 +116,12 @@ MQ_ANALYSTIC <- R6Class(
     MYSQL.SETTING =NULL,
     DB.OPEN.FUN = NULL,
     DB.OHLC.FUN = NULL,
+    
+    selected.index = c(),
     mismatch = c(),
     report = list(),
-    merged.report = NULL,
+    focus.report = NULL,
+    
     #### GETTER & SETTER ####
     get.report.simple = function(member, index) {
       if (length(member) == 1) {
@@ -121,19 +129,6 @@ MQ_ANALYSTIC <- R6Class(
       } else {
         lapply(private$report[index], function(r) r[member])
       }
-    }#,
-    # .set.report = function(member, index, value) {
-    #   # if (missing(index)) {
-    #   #   index <- 1:length(private$report)
-    #   # }
-    #   # if (missing(member)) {
-    #   #   return(private$report[index] <- value)
-    #   # }
-    #   private$report[index] <-
-    #     mapply(function(r, m, v) {
-    #       r %>% inset(m, v)
-    #     }, r = private$report[index], v = value, MoreArgs = list(m = member))
-    # }#,
-    
+    }
   )
 )
