@@ -2,7 +2,7 @@ library(compiler)
 compilePKGS(T)
 
 #### @UPDATE IDEA@ ####
-## 2017-02-17: 
+## 2017-02-22:timeserie.account optimize, table / len 
 
 #### @PATCH NOTE@ ####
 ## 2017-02-17: Version 0.1

@@ -9,9 +9,11 @@ compilePKGS(T)
 #### @PATCH NOTE@ ####
 ## 2017-02-23: REPORT list include:
 ##              PHASE 1: c('INFOS', 'HTML.PARSE', 'PATH') 
-##              PHASE 2: c('CURRENCY', 'LEVERAGE', 'TICKETS.RAW') 
+##              PHASE 2: c('CURRENCY', 'LEVERAGE', 'TICKETS.RAW', 'ITEM.SYMBOL.MAPPING',
+##                         'SUPPORTED.ITEM', 'UNSUPPORTED.ITEM', 'TICKETS.SUPPORTED') 
 ## 2017-02-22: Version 0.2 loose coupling for environment
 ## 2017-02-05: Version 0.1
+
 
 read.mq.file <- function(mq.files, parallel=PARALLEL.THRESHOLD.READ.FILES) {
   # ''' read mq files (V) '''

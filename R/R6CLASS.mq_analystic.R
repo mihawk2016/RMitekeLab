@@ -36,9 +36,6 @@ MQ_ANALYSTIC <- R6Class(
       private$report <- list()
       private$merged.report <- NULL
     },
-    build.focus = function() {
-      
-    },
     
     #### GETTER & SETTER ####
     get.report = function(member, index,
@@ -67,6 +64,10 @@ MQ_ANALYSTIC <- R6Class(
           self$set.report(index = null.index, value = new.report)
         }
       }
+      if (any(member %in% c('TICKETS.ANALYSING'))) {
+        tickets.supported <- self$get.tickets('TICKETS.SUPPORTED', index)
+        
+      }
       return(private$get.report.simple(member, index))
     },
     set.report = function(member, index, value) {
@@ -81,18 +82,18 @@ MQ_ANALYSTIC <- R6Class(
           r %>% inset(m, v)
         }, r = private$report[index], v = value, MoreArgs = list(m = member))
     },
-    get.focus = function(member) {
+    get.merged.report = function(member) {
       if (missing) {
-        private$focus.report
+        private$merged.report
       } else {
-        private$focus.report[[member]]
+        private$merged.report[[member]]
       }
     },
-    set.focus = function(member, value) {
+    set.merged.report = function(member, value) {
       if (missing) {
-        private$focus.report
+        private$merged.report
       } else {
-        private$focus.report[[member]] <- value 
+        private$merged.report[[member]] <- value 
       }
     },
     get = function(member) {
@@ -120,7 +121,32 @@ MQ_ANALYSTIC <- R6Class(
     selected.index = c(),
     mismatch = c(),
     report = list(),
-    focus.report = NULL,
+    merged.report = NULL,
+    
+    
+    build.merged.report = function(index=private$selected.index,
+                                   default.currency=private$DEFAULT.CURRENCY,
+                                   default.leverage=private$DEFAULT.LEVERAGE,
+                                   get.open.fun=private$DB.OPEN.FUN,
+                                   mysql.setting=private$MYSQL.SETTING,
+                                   timeframe=private$TIMEFRAME.TICKVALUE,
+                                   symbols.setting=private$SYMBOLS.SETTING,
+                                   parallel=private$PARALLEL.THRESHOLD.GENERATE.TICKETS) {
+      if (length(index) < 2) {
+        return(NULL)
+      }
+      within(list(), {
+        INFOS <- self$get.report('INFOS', index) %>% rbindlist
+        CURRENCY <- report.currency(INFOS, default.currency)
+        LEVERAGE <- report.leverage(INFOS, default.leverage)
+        TICKETS.RAW <- self$get.report('TICKETS.RAW', index, default.currency, default.leverage, get.open.fun, mysql.setting,
+                                       timeframe, symbols.setting, parallel) %>% rbindlist
+        ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
+        SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
+        UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
+        TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING) %>% rbindlist
+      })
+    },
     
     #### GETTER & SETTER ####
     get.report.simple = function(member, index) {
