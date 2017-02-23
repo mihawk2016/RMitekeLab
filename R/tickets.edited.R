@@ -219,19 +219,19 @@ timeseries.account <- function(timeseries.symbols) {
   }
   account.table <- 0
   # print(timeseries.symbols[[1]])
-  union.time <- (timeseries.symbols[[1]])[, time]
+  intersection.time <- (timeseries.symbols[[1]])[, time]
   len <- length(timeseries.symbols)
   if (len > 1) {
     lapply(timeseries.symbols[2:len], function(symbol.serie) {
-      union.time <<- union(union.time, symbol.serie[, time])
+      intersection.time <<- intersection(intersection, symbol.serie[, time])
     })
   }
   lapply(timeseries.symbols, function(symbol.serie) {
     account.table <<- account.table +
-      symbol.serie[.(union.time), c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME')]
+      symbol.serie[.(intersection.time), c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME')]
   })
   account.table %>%
-    extract(j = time := union.time) %>%
+    extract(j = time := intersection.time) %>%
     setkey(time)
 } # FINISH
 
