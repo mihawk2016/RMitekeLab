@@ -21,12 +21,6 @@ TICKETS.COLUMNS <- list(
   WORKING = c('TICKET', 'OTIME', 'TYPE', 'VOLUME', 'ITEM', 'OPRICE', 'SL', 'TP', 'CPRICE')
 )
 
-
-#### TICKETS ENVIRONMENT ####
-# init.tickets.raw <- function() {
-#   assign('TICKETS.RAW', list(), envir = METAQUOTE.ANALYSTIC)
-# }
-
 init.tickets.temp <- function() {
   assign('TICKETS.TEMP', list(), envir = METAQUOTE.ANALYSTIC)
 }
@@ -34,17 +28,6 @@ init.tickets.temp <- function() {
 get.tickets.temp <- function() {
   get('TICKETS.TEMP', envir = METAQUOTE.ANALYSTIC)
 }
-
-# get.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING, cluster=NULL) {
-#   if (missing(index)) {
-#     index <- 1:length(get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC))
-#   }
-#   if (is.null(cluster) || length(index) < 4) {
-#     lapply(index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
-#   } else {
-#     parLapplyLB(cluster, index, fetch.tickets.raw, get.open.fun, timeframe, symbols.setting)
-#   }
-# }
 
 append.to.tickets.temp <- function(tickets) {
   METAQUOTE.ANALYSTIC$TICKETS.TEMP %<>%
@@ -61,46 +44,103 @@ build.tickets.raw <- function() {
   tickets
 }
 
-# fetch.tickets.raw <- function(index, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
-#   tickets.raw <- get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC)[[index]]
-#   if (!is.null(tickets.raw)) {
-#     return(tickets.raw)
-#   }
-#   infos <- get.infos(index)[[1]]
-#   type <- infos$TYPE
-#   file <- infos$PATH
-#   parse <- get.html.parse(index)[[1]]
-#   suppressWarnings({
-#     switch(
-#       type,
-#       'MT4-EA' = fetch.html.data.tickets.mt4ea(file, parse, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
-#       'MT4-Trade' = fetch.html.data.tickets.mt4trade(file, parse),
-#       'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
-#       'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, timeframe, infos$CURRENCY, symbols.setting),
-#       'MT4M-Closed' = fetch.html.data.tickets.mt4m_closed(file),
-#       'MT4M-Raw' = fetch.html.data.tickets.mt4m_raw(file)
-#     )
-#   })
-#   append.to.tickets.raw(index)
-# } # FINISH
+generate.html.tickets <- function(file, parse, infos,
+                                  default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
+                                  get.open.fun=DB.O, mysql.setting=MYSQL.SETTING,
+                                  timeframe='M1', symbols.setting=SYMBOLS.SETTING,
+                                  parallel=PARALLEL.THRESHOLD.GENERATE.TICKETS) {
+  if (is.numeric(parallel)) {
+    parallel <- length(file) >= parallel
+  }
+  if (!parallel) {
+    mapply(fetch.html.tickets, file, parse, infos,
+           MoreArgs = list(default.currency, default.leverage, get.open.fun, mysql.setting,
+                           timeframe, symbols.setting), SIMPLIFY = FALSE, USE.NAMES = FALSE)
+  } else {
+    cluster <- makeCluster(detectCores() - 1)
+    clusterMap(cluster, fetch.html.tickets, file, parse, infos,
+               MoreArgs = list(default.currency, default.leverage, get.open.fun, mysql.setting,
+                               timeframe, symbols.setting), SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    stopCluster(cluster)
+  }
+}
 
-fetch.tickets.raw <- function(file, parse, currency, get.open.fun=DB.O, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
+generate.html.tickets2 <- function(report,
+                                   default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE, get.open.fun=DB.O,
+                                   mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING,
+                                   parallel=PARALLEL.THRESHOLD.GENERATE.TICKETS) {
+  if (is.numeric(parallel)) {
+    parallel <- length(report) >= parallel
+  }
+  if (!parallel) {
+    lapply(report, fetch.html.tickets2, default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)
+  } else {
+    cluster <- makeCluster(detectCores() - 1)
+    
+    parLapply(cluster, report, fetch.html.tickets2, default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)
+    stopCluster(cluster)
+  }
+}
+
+#### FETCH TICKETS ####
+fetch.html.tickets <- function(file, parse, infos, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
+                               get.open.fun=DB.O, mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
+  within(list(
+    PATH = file,
+    HTML.PARSE = parse,
+    INFOS = infos
+  ), {
+    CURRENCY <- report.currency(infos, default.currency)
+    LEVERAGE <- report.leverage(infos, default.leverage)
+    TICKETS.RAW <- tickets.raw(infos[, TYPE], file, parse, CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting)
+    ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
+    SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
+    UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
+    TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING)
+  })
+}
+
+fetch.html.tickets2 <- function(report, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
+                                get.open.fun=DB.O, mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
+  within(report, {
+    CURRENCY <- report.currency(report$INFOS, default.currency)
+    LEVERAGE <- report.leverage(report$INFOS, default.leverage)
+    TICKETS.RAW <- tickets.raw(report$INFOS[, TYPE], report$PATH, report$HTML.PARSE,
+                               CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting)
+    ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
+    SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
+    UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
+    TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING)
+  })
+
+  # report$CURRENCY <- report.currency(report$INFOS, default.currency)
+  # report$LEVERAGE <- report.leverage(report$INFOS, default.leverage)
+  # report$TICKETS.RAW <- tickets.raw(report$INFOS[, TYPE], report$PATH, report$HTML.PARSE,
+  #                                   report$CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting)
+  # report$ITEM.SYMBOL.MAPPING <- item.symbol.mapping(report$TICKETS.RAW, symbols.setting[, SYMBOL])
+  # report$SUPPORTED.ITEM <- supported.items(report$ITEM.SYMBOL.MAPPING)
+  # report$UNSUPPORTED.ITEM <- unsupported.items(report$ITEM.SYMBOL.MAPPING)
+  # report$TICKETS.SUPPORTED <- tickets.supported(report$TICKETS.RAW, report$ITEM.SYMBOL.MAPPING)
+
+}
+
+tickets.raw <- function(type, file, parse, currency, get.open.fun=DB.O, mysql.setting=MYSQL.SETTING,
+                        timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   suppressWarnings({
     switch(
       type,
-      'MT4-EA' = fetch.html.data.tickets.mt4ea(file, parse, get.open.fun, timeframe, currency, symbols.setting),
+      'MT4-EA' = fetch.html.data.tickets.mt4ea(file, parse, get.open.fun, mysql.setting, timeframe, currency, symbols.setting),
       'MT4-Trade' = fetch.html.data.tickets.mt4trade(file, parse),
-      'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, timeframe, currency, symbols.setting),
-      'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, timeframe, currency, symbols.setting),
+      'MT5-EA' = fetch.html.data.tickets.mt5ea(file, get.open.fun, mysql.setting, timeframe, currency, symbols.setting),
+      'MT5-Trade' = fetch.html.data.tickets.mt5trade(file, get.open.fun, mysql.setting, timeframe, currency, symbols.setting),
       'MT4M-Closed' = fetch.html.data.tickets.mt4m_closed(file),
       'MT4M-Raw' = fetch.html.data.tickets.mt4m_raw(file)
     )
   })
 } # FINISH
 
-
 #### FETCH TICKETS ####
-fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, timeframe='M1',
+fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, mysql.setting, timeframe='M1',
                                           currency, symbols.setting=SYMBOLS.SETTING) {
   table <-
     readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2,
@@ -184,8 +224,8 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
       }
       closed.tickets[, c('SWAP', 'PROFIT') := {
         pips <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
-        tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, timeframe, currency, symbols.setting)
-        new.profit <- cal.profits(VOLUME, tickvalue, pips)
+        tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, mysql.setting, timeframe, currency, symbols.setting)
+        new.profit <- cal.profit(VOLUME, tickvalue, pips)
         list(PROFIT - new.profit, new.profit)
       }]
     }
@@ -236,7 +276,7 @@ fetch.html.data.tickets.mt4trade <- function(mq.file, mq.file.parse) {
   build.tickets.raw()
 } # FINISH
 
-fetch.html.data.tickets.mt5ea <- function(mq.file, get.open.fun, timeframe, currency, symbols.setting) {
+fetch.html.data.tickets.mt5ea <- function(mq.file, get.open.fun, mysql.setting, timeframe, currency, symbols.setting) {
   ## 13 columns
   blocks <-
     readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 2,
@@ -247,11 +287,11 @@ fetch.html.data.tickets.mt5ea <- function(mq.file, get.open.fun, timeframe, curr
   blocks$Orders %>%
     html.data.mt5.pending
   blocks$Deals %>%
-    html.data.mt5.money_closed_open(get.open.fun, timeframe, currency, symbols.setting)
+    html.data.mt5.money_closed_open(get.open.fun, mysql.setting, timeframe, currency, symbols.setting)
   build.tickets.raw()
 } # FINISH
 
-fetch.html.data.tickets.mt5trade <- function(mq.file, get.open.fun, timeframe, currency, symbols.setting) {
+fetch.html.data.tickets.mt5trade <- function(mq.file, get.open.fun, mysql.setting, timeframe, currency, symbols.setting) {
   ## 13 columns 
   blocks  <-
     readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'UTF-8', which = 1,
@@ -274,7 +314,7 @@ fetch.html.data.tickets.mt5trade <- function(mq.file, get.open.fun, timeframe, c
                                               num.char.to.num(CPRICE))) %>%
     build.tickets('WORKING')
   blocks$Deals %>%
-    html.data.mt5.money_closed_open(get.open.fun, timeframe, currency, symbols.setting, cprices)
+    html.data.mt5.money_closed_open(get.open.fun, mysql.setting, timeframe, currency, symbols.setting, cprices)
   build.tickets.raw()
 } # FINISH
 
@@ -290,7 +330,7 @@ html.data.mt5.pending <- function(orders.table) {
     build.tickets('PENDING')
 } # FINISH
 
-html.data.mt5.money_closed_open <- function(deals.table, get.open.fun, timeframe,
+html.data.mt5.money_closed_open <- function(deals.table, get.open.fun, mysql.setting, timeframe,
                                             currency, symbols.setting, cprices=NULL) {
   deals.table %<>%
     extract(j = c(2, 12) := NULL) %>%
@@ -302,12 +342,12 @@ html.data.mt5.money_closed_open <- function(deals.table, get.open.fun, timeframe
     extract(j = PROFIT := num.char.to.num(PROFIT)) %>%
     build.tickets('MONEY')
   deals.table[!'BALANCE',
-              html.data.mt5.symbol.closed_open(.SD, ITEM, cprices[ITEM], get.open.fun,
+              html.data.mt5.symbol.closed_open(.SD, ITEM, cprices[ITEM], get.open.fun, mysql.setting,
                                                timeframe, currency, symbols.setting),
               by = ITEM]
 } # FINISH
 
-html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item, cprice, get.open.fun,
+html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item, cprice, get.open.fun, mysql.setting,
                                              timeframe, currency, symbols.setting) {
   deals.no.money.table %<>% copy
   if (any('IN/OUT' %in% deals.no.money.table[, direction])) {
@@ -351,18 +391,18 @@ html.data.mt5.symbol.closed_open <- function(deals.no.money.table, item, cprice,
   buy_out <- out.part['BUY']
   sell_out <- out.part['SELL']
   if (nrow(buy_in)) {
-    html.data.mt5.symbol.closed_open.build.tickets(buy_in, sell_out, cprice, get.open.fun,
+    html.data.mt5.symbol.closed_open.build.tickets(buy_in, sell_out, cprice, get.open.fun, mysql.setting,
                                                    timeframe, currency, symbols.setting)
   }
   if (nrow(sell_in)) {
-    html.data.mt5.symbol.closed_open.build.tickets(sell_in, buy_out, cprice, get.open.fun,
+    html.data.mt5.symbol.closed_open.build.tickets(sell_in, buy_out, cprice, get.open.fun, mysql.setting,
                                                    timeframe, currency, symbols.setting)
   }
   NULL
 } # FINISH
 
-html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part, cprice,
-                                                           get.open.fun, timeframe, currency, symbols.setting) {
+html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part, cprice, get.open.fun,
+                                                           mysql.setting, timeframe, currency, symbols.setting) {
   in.part %<>%
     extract(j = c('csVOLUME', 'VOLUME') := list(cumsum(VOLUME), NULL)) %>%
     setkey(csVOLUME)
@@ -400,8 +440,8 @@ html.data.mt5.symbol.closed_open.build.tickets <- function(in.part, out.part, cp
       }
       closed[j = PROFIT := {
         pips <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
-        tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, timeframe, currency, symbols.setting)
-        cal.profits(VOLUME, tickvalue, pips)
+        tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, mysql.setting, timeframe, currency, symbols.setting)
+        cal.profit(VOLUME, tickvalue, pips)
       }]
     }
     build.tickets(closed, 'CLOSED')
@@ -534,7 +574,6 @@ symbol.quote.currency <- function(symbol) {
 build.symbol <- function(currency1, currency2, support.symbols=SUPPORT.SYMBOLS) {
   # ''' build symbol from 2 currencies '''
   # 2016-08-12: Version 1.0 FIX support.symbols: self$get.support.symbols() should usd all symbol table
-  
   match.currency1.symbols <-
     support.symbols %>%
     extract(support.symbols %>% str_detect(currency1))
@@ -548,7 +587,7 @@ build.symbol <- function(currency1, currency2, support.symbols=SUPPORT.SYMBOLS) 
     }
 } # FINISH
 
-cal.tick.value = function(symbol, times, get.open.fun, timeframe='M1', currency=DEFAULT.CURRENCY,
+cal.tick.value = function(symbol, times, get.open.fun, mysql.setting, timeframe='M1', currency=DEFAULT.CURRENCY,
                           symbols.setting=SYMBOLS.SETTING) {
   # ''' cal tick.value '''
   # 2017-01-23: Version 0.1
@@ -561,15 +600,7 @@ cal.tick.value = function(symbol, times, get.open.fun, timeframe='M1', currency=
   if (target.symbol == '') {
     return(1)
   }
-  target.open <- get.open.fun(target.symbol, times, timeframe)
-  # tick.value.point %>% {
-  #   if (base.currency == symbol.base.currency(target.symbol)) {
-  #     divide_by(target.open)
-  #   } else {
-  #     multiply_by(target.open)
-  #   }
-  # }
-  
+  target.open <- get.open.fun(target.symbol, times, timeframe, mysql.setting)
   if (base.currency == symbol.base.currency(target.symbol)) {
     return(tick.value.point / target.open)
   } else {
@@ -577,7 +608,7 @@ cal.tick.value = function(symbol, times, get.open.fun, timeframe='M1', currency=
   }
 }
 
-cal.margin.required = function(symbol, times, get.open.fun, timeframe='M1', currency=DEFAULT.CURRENCY, 
+cal.margin.required = function(symbol, times, get.open.fun, mysql.setting, timeframe='M1', currency=DEFAULT.CURRENCY, 
                                leverage=DEFAULT.LEVERAGE, symbols.setting=SYMBOLS.SETTING) {
   # ''' cal margin required '''
   # 2017-01-23: Version 0.1
@@ -590,14 +621,7 @@ cal.margin.required = function(symbol, times, get.open.fun, timeframe='M1', curr
   if (target.symbol == '') {
     return(1000)
   }
-  target.open <- get.open.fun(target.symbol, times, timeframe)
-  # margin.required.point %>% {
-  #   if (quote.currency == symbol.quote.currency(target.symbol)) {
-  #     multiply_by(target.open)
-  #   } else {
-  #     divide_by(target.open)
-  #   }
-  # }
+  target.open <- get.open.fun(target.symbol, times, timeframe, mysql.setting)
   if (quote.currency == symbol.quote.currency(target.symbol)) {
     return(margin.required.point * target.open)
   } else {
@@ -648,4 +672,24 @@ item.to.symbol <- function(item, support.symbols=SUPPORT.SYMBOLS) {
     }
 }
 
-####
+#### REPORT SETTINGS ####
+report.currency <- function(infos, default=DEFAULT.CURRENCY) {
+  info.currency <-
+    infos[, CURRENCY] %>%
+    unique
+  if (length(info.currency) > 1) {
+    return(default)
+  }
+  ifelse(is.na(info.currency), default, info.currency)
+}
+
+report.leverage <- function(infos, default=DEFAULT.LEVERAGE) {
+  info.leverage <-
+    infos[, LEVERAGE] %>%
+    unique
+  if (length(info.leverage) > 1) {
+    return(default)
+  }
+  ifelse(is.na(info.leverage), default, info.leverage)
+}
+

@@ -6,6 +6,9 @@ compilePKGS(T)
 ## 2017-02-16: @DONE parallel problem, they should just return values
 
 #### @PATCH NOTE@ ####
+## 2017-02-23: REPORT list include:
+##              PHASE 1: c('INFOS', 'HTML.PARSE', 'PATH') 
+##              PHASE 2: c('CURRENCY', 'LEVERAGE', 'TICKETS.RAW') 
 ## 2017-02-22: Version 0.2 loose coupling for environment
 ## 2017-02-05: Version 0.1
 

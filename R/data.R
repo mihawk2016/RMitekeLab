@@ -17,24 +17,23 @@ MYSQL.SETTING <- list(
 )
 
 #### DATABASE FUNCTIONS ####
-DB.O <- function(symbol, time, timeframe='M1') {
-  mysql.price.open(symbol, time, timeframe)
+DB.O <- function(symbol, time, mysql.setting=MYSQL.SETTING, timeframe='M1') {
+  mysql.price.open(symbol, time, mysql.setting, timeframe)
 }
 
-DB.OHLC <- function(symbol, from, to, timeframe='H1', cluster=NULL) {
-  mysql.price.ohlc(symbol, from, to, timeframe, cluster)
+DB.OHLC <- function(symbol, from, to, timeframe='H1', mysql.setting=MYSQL.SETTING, cluster=NULL) {
+  mysql.price.ohlc(symbol, from, to, timeframe, mysql.setting, cluster)
 }
 
 #### MYSQL ####
-mysql.query <- function(sql, host=MYSQL.SETTING$HOST, port=MYSQL.SETTING$PORT, username=MYSQL.SETTING$USERNAME,
-                        password=MYSQL.SETTING$PASSWORD, dbname=MYSQL.SETTING$DBNAME, cluster=NULL) {
+mysql.query <- function(sql, setting=MYSQL.SETTING, cluster=NULL) {
   # ''' mysql query '''
   # 2017-01-22: Version 1.0
   if (!length(sql)) {
     return(NULL)
   }
   mysql.connection <- tryCatch(
-    dbConnect(MySQL(), host = host, port = port, username = username, password = password, dbname = dbname),
+    dbConnect(MySQL(), host = setting$HOST, port = setting$PORT, username = setting$USERNAME, password = setting$PASSWORD, dbname = setting$DBNAME),
     error = function(e) {
       message('MySQL Connect ERROR')
       NULL
@@ -58,7 +57,7 @@ mysql.get.data.table <- function(sql, connection) {
     as.data.table
 } # FINISH
 
-mysql.price.open <- function(symbol, time, timeframe='M1') {
+mysql.price.open <- function(symbol, time, timeframe='M1', setting=MYSQL.SETTING) {
   # ''' get open data from mysql database '''
   # 2017-02-16: Version 2.0 use data.table, optimize method
   # 2017-01-22: Version 1.0
@@ -78,7 +77,7 @@ mysql.price.open <- function(symbol, time, timeframe='M1') {
   time.period <- gsub('-', '.', as.character(c(min.time, max.time)))
   sql.string <- "SELECT time, open FROM %s WHERE time BETWEEN '%s' AND '%s'"
   sql <- sprintf(sql.string, table, time.period[1], time.period[2])
-  mysql.query(sql)[[1]] %>%
+  mysql.query(sql, setting)[[1]] %>%
     as.data.table %>%
     extract(j = time := time.char.to.num(time)) %>%
     setkey(time) %>%
@@ -86,7 +85,7 @@ mysql.price.open <- function(symbol, time, timeframe='M1') {
     extract(j = open)
 } # FINISH
 
-mysql.price.ohlc <- function(symbol, from, to, timeframe='H1', cluster=NULL) {
+mysql.price.ohlc <- function(symbol, from, to, timeframe='H1', setting=MYSQL.SETTING, cluster=NULL) {
   # ''' get ohlc from mysql database '''
   # 2017-01-22: Version 1.0
   table <-
@@ -102,7 +101,7 @@ mysql.price.ohlc <- function(symbol, from, to, timeframe='H1', cluster=NULL) {
   time.period <- gsub('-', '.', as.character(c(from, to)))
   sql.string <- "SELECT time, open, high, low, close FROM %s WHERE time BETWEEN '%s' AND '%s'"
   sql <- sprintf(sql.string, table, time.period[1], time.period[2])
-  mysql.query(sql) %>%
+  mysql.query(sql, setting) %>%
     set_names(symbol) %>%
     lapply(function(price.table) {
       price.table[j = time := time.char.to.num(time)] %>%
