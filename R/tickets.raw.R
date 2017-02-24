@@ -98,27 +98,31 @@ fetch.html.tickets <- function(file, parse, infos, index, default.currency=DEFAU
     CURRENCY <- report.currency(infos, default.currency)
     LEVERAGE <- report.leverage(infos, default.leverage)
     TICKETS.RAW <- tickets.raw(infos[, TYPE], file, parse, CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting)%>%
-      extract(j = FILE := index)
+      extract(j = c('FILE.INDEX', 'FILE') := list(index, infos[, FILE]))
     ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
     SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
     UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
     TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING)
+    TICKETS.EDITING <- tickets.editing(TICKETS.SUPPORTED)
   })
 }
 
 fetch.html.tickets2 <- function(report, index, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
                                 get.open.fun=DB.O, mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
-  within(report, {
-    CURRENCY <- report.currency(report$INFOS, default.currency)
-    LEVERAGE <- report.leverage(report$INFOS, default.leverage)
-    TICKETS.RAW <- tickets.raw(report$INFOS[, TYPE], report$PATH, report$HTML.PARSE,
-                               CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting) %>%
-      extract(j = FILE.INDEX := index)
-    ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
-    SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
-    UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
-    TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING)
-  })
+  # within(report, {
+  #   CURRENCY <- report.currency(report$INFOS, default.currency)
+  #   LEVERAGE <- report.leverage(report$INFOS, default.leverage)
+  #   TICKETS.RAW <- tickets.raw(report$INFOS[, TYPE], report$PATH, report$HTML.PARSE,
+  #                              CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting) %>%
+  #     extract(j = FILE.INDEX := index)
+  #   ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
+  #   SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
+  #   UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
+  #   TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING)
+  #   TICKETS.EDITING <- tickets.editing(TICKETS.SUPPORTED)
+  # })
+  fetch.html.tickets(report$PATH, report$HTML.PARSE, report$PATH, index,
+                     default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)
 }
 
 tickets.raw <- function(type, file, parse, currency, get.open.fun=DB.O, mysql.setting=MYSQL.SETTING,

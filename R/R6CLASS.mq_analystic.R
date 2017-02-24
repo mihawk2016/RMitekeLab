@@ -64,10 +64,18 @@ MQ_ANALYSTIC <- R6Class(
           self$set.report(index = null.index, value = new.report)
         }
       }
-      if (any(member %in% c('TICKETS.ANALYSING'))) {
-        tickets.editing <- self$get.tickets('TICKETS.SUPPORTED', index)
-        
-      }
+      # if (any(member %in% c('TICKETS.EDITING'))) {
+      #   null.sub.index <- sapply(private$report[index], function(r) is.null(r$TICKETS.EDITING)) %>% which
+      #   if (length(null.sub.index)) {
+      #     
+      #   }
+      #   # tickets.editing <-
+      #   #   self$get.report('CURRENCY', index) %>%
+      #   #   generate.tickets.editing2 #%>%
+      #   # print(tickets.editing)
+      #   #   self$set.report(index = index, value = .)
+      #   # self$set.report(index = null.index, value = generate.tickets.editing2(tickets.editing))
+      # }
       return(private$get.report.simple(member, index))
     },
     set.report = function(member, index, value) {

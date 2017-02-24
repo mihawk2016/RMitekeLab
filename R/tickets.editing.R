@@ -16,6 +16,8 @@ tickets.editing <- function(tickets.supported, with.open=FALSE) {
   
 }
 
-generate.tickets.editing2 <- function(report, ) {
-  
-}
+# generate.tickets.editing2 <- function(report) {
+#   lapply(report, function(r) {
+#     within(r, TICKETS.EDITING <- tickets.editing(r$TICKETS.SUPPORTED))
+#   })
+# }
