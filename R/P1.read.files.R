@@ -2,16 +2,25 @@ library(compiler)
 compilePKGS(T)
 
 #### @UPDATE IDEA@ ####
-## 2017-02-16: loose coupling for environment
-## 2017-02-16: parallel problem, they should just return values
+## 2017-02-23: MT4-EA/Trade raw tickets code optimize, parse data earlier catch.
+## 2017-02-16: @DONE loose coupling for environment
+## 2017-02-16: @DONE parallel problem, they should just return values
 
 #### @PATCH NOTE@ ####
+## 2017-02-23: REPORT list include:
+##              PHASE 1: c('INFOS', 'HTML.PARSE', 'PATH') 
+##              PHASE 2: c('CURRENCY', 'LEVERAGE', 'TICKETS.RAW', 'ITEM.SYMBOL.MAPPING',
+##                         'SUPPORTED.ITEM', 'UNSUPPORTED.ITEM', 'TICKETS.SUPPORTED') 
+## 2017-02-22: Version 0.2 loose coupling for environment
 ## 2017-02-05: Version 0.1
 
-read.mq.file <- function(mq.files, cluster=NULL) {
+
+read.mq.file <- function(mq.files, parallel=PARALLEL.THRESHOLD.READ.FILES) {
   # ''' read mq files (V) '''
   # @param mq.files: MetaQuote files.
   # @return:
+  # 2017-02-22: Version 1.0 parallel mode update
+  #             @Note: over 15 files goes parallel mode
   # 2017-02-12: Version 0.3 fix file path for input mode
   # 2017-02-07: Version 0.2 parallel
   # 2017-02-05: Version 0.1
@@ -21,14 +30,18 @@ read.mq.file <- function(mq.files, cluster=NULL) {
   } else {
     mq.names <- basename(mq.files)
   }
-  if (is.null(cluster) || length(mq.files) < 4) {
-    mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
-  } else {
-    clusterMap(cluster, fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE)
+  if (is.numeric(parallel)) {
+    parallel <- length(mq.files) >= parallel
   }
-  METAQUOTE.ANALYSTIC$TICKETS.RAW %<>%
-    c(vector('list', length(get.infos()) - length(get('TICKETS.RAW', envir = METAQUOTE.ANALYSTIC))))
-}
+  if (!parallel) {
+    fetched.data <- mapply(fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+  } else {
+    cluster <- makeCluster(detectCores() - 1)
+    fetched.data <- clusterMap(cluster, fetch.file.data, mq.files, mq.names, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    stopCluster(cluster)
+  }
+  fetched.data
+} # FINISH
 
 fetch.file.data <- function(mq.file, mq.file.name) {
   # ''' fetch mq file's data (S) '''
@@ -49,19 +62,22 @@ fetch.file.data <- function(mq.file, mq.file.name) {
       NULL
     }
   if (is.null(data)) {
-    append.to.mismatch(mq.file.name)
+    mq.file.name
   } else {
-    set.infos.path(mq.file)
-    set.infos.file(mq.file.name)
+    within(data, {
+      INFOS %<>%
+        extract(j = FILE := mq.file.name)
+      PATH <- mq.file
+    })
   }
 }
-
 
 fetch.html.data <- function(mq.file) {
   # ''' fetch mq html's data (S) '''
   # @param mq.files: MetaQuote file.
   # @param mq.names: MetaQuote file-name.
   # @return: data of MetaQuote file.
+  # 2017-02-21: Version 0.2 loose coupling for environment
   # 2017-02-05: Version 0.1
   title <-
     tryCatch(
@@ -76,33 +92,33 @@ fetch.html.data <- function(mq.file) {
     extract((.) %>%
               str_detect('<title>') %>%
               which) %>%
-    read_html() %>%
+    read_html %>%
     xml_find_first('.//title') %>%
     xml_text
   if (grepl('Strategy Tester:', title)) {
-    read_html(mq.file, encoding = 'GBK') %T>%
-      fetch.html.data.infos.mt4ea %>%
-      append.to.html.parse
+    html.parse <- read_html(mq.file, encoding = 'GBK')
+    infos <- fetch.html.data.infos.mt4ea(html.parse)
   } else if (grepl('Statement:', title)) {
-    read_html(mq.file, encoding = 'GBK') %T>%
-      fetch.html.data.infos.mt4trade %>%
-      append.to.html.parse
+    html.parse <- read_html(mq.file, encoding = 'GBK')
+    infos <- fetch.html.data.infos.mt4trade(html.parse)
   } else if (grepl('Strategy Tester Report', title)) {
-    read_html(mq.file, encoding = 'UTF-16') %T>%
-      fetch.html.data.infos.mt5ea %>%
-      append.to.html.parse
+    html.parse <- read_html(mq.file, encoding = 'UTF-16')
+    infos <- fetch.html.data.infos.mt5ea(html.parse)
   } else if (grepl('Trade History Report', title)) {
-    read_html(mq.file, encoding = 'UTF-16') %T>%
-      fetch.html.data.infos.mt5trade %>%
-      append.to.html.parse
+    html.parse <- read_html(mq.file, encoding = 'UTF-16')
+    infos <- fetch.html.data.infos.mt5trade(html.parse)
   } else if (grepl('Closed Trades Report', title)) {
-    fetch.html.data.infos.mt4m_closed()
-    append.to.html.parse('NEEDLESS')
+    html.parse <- NULL
+    infos <- fetch.html.data.infos.mt4m_closed()
   } else if (grepl('Raw Report', title)) {
-    fetch.html.data.infos.mt4m_raw()
-    append.to.html.parse('NEEDLESS')
+    html.parse <- NULL
+    infos <- fetch.html.data.infos.mt4m_raw()
   } else {
     return(NULL)
   }
+  list(
+    HTML.PARSE = html.parse,
+    INFOS = infos
+  )
 }
 

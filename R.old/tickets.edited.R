@@ -2,14 +2,29 @@ library(compiler)
 compilePKGS(T)
 
 #### @UPDATE IDEA@ ####
-## 2017-02-17: 
+## 2017-02-22:timeserie.account optimize, table / len 
 
 #### @PATCH NOTE@ ####
 ## 2017-02-17: Version 0.1
 
 ## additional tickets column: PIP, NPROFIT, RESULT, LOT.PROFIT
 
-tickets.edited <- function(tickets.editing, get.open.fun=DB.O, timeframe='M1', currency=DEFAULT.CURRENCY,
+PHASE3 <- function(tickets.editing, currency=DEFAULT.CURRENCY, get.open.fun=DB.O, timeframe.tickvalue='M1',
+                   get.ohlc.fun=DB.OHLC, timeframe.report='H1', parallel=PARALLEL.THRESHOLD.DB.SYMBOLS,
+                   symbols.setting=SYMBOLS.SETTING) {
+  within(list(), {
+    TICKETS.EDITED <- tickets.edited(tickets.editing, currency, get.open.fun, timeframe.tickvalue, symbols.setting)
+    PERIOD <- tickets.period(TICKETS.EDITED)
+    PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, parallel)
+    TIMESERIE.TICKETS <- timeseries.tickets(tickets.edited, PRICE %>% price.data.with.tickvalue(
+      get.open.fun, timeframe.tickvalue, currency, symbols.setting
+    ), symbols.setting)
+    TIMESERIE.SYMBOLS <- timeseries.symbols(TIMESERIE.TICKETS)
+    TIMESERIE.ACCOUNT <- timeseries.account(TIMESERIE.SYMBOLS)
+  })
+}
+
+tickets.edited <- function(tickets.editing, currency=DEFAULT.CURRENCY, get.open.fun=DB.O, timeframe='M1',
                            symbols.setting=SYMBOLS.SETTING) {
   tickets.editing %>%
     setkey(SYMBOL) %>%
@@ -46,8 +61,15 @@ tickets.period <- function(tickets.edited) {
   )
 } # FINISH
 
+#### STATISTICS ####
 tickets.statistics <- function(tickets.edited) {
-  
+  within(list(), {
+    STATISTIC.RESULT <- tickets.statistics.by.result(tickets.edited)
+    STATISTIC.EXIT <- tickets.statistics.by.exit(tickets.edited)
+    STATISTIC.TYPE <- tickets.statistics.by.type(tickets.edited)
+    STATISTIC.SUMMARY <- tickets.statistics.by.result(STATISTIC.RESULT)
+    STATISTIC.CONTINUOUS <- tickets.statistics.continuous(tickets.edited)
+  })
 }
 
 tickets.statistics.by.result <- function(tickets.edited) {
@@ -137,15 +159,20 @@ tickets.statistics.continuous <- function(tickets.edited) {
   con.table[row.name]
 } # FINISH
 
-price.data <- function(tickets.edited, tickets.period, get.ohlc.fun=DB.OHLC, timeframe='H1',
-                       get.open.fun=DB.O, tickvalue.timeframe='M1', currency=DEFAULT.CURRENCY,
-                       symbols.setting=SYMBOLS.SETTING, cluster=NULL) {
+#### PRICE DATA ####
+price.data <- function(tickets.edited, tickets.period, get.ohlc.fun=DB.OHLC, timeframe='H1', parallel=PARALLEL.THRESHOLD.DB.SYMBOLS) {
   symbols <-
     tickets.edited[, SYMBOL] %>%
     unique
   time.period <- tickets.period$NATURE.INTERVAL
-  price.data <- get.ohlc.fun(symbols, int_start(time.period), int_end(time.period), timeframe, cluster)
+  get.ohlc.fun(symbols, int_start(time.period), int_end(time.period), timeframe, parallel)
+}
+
+price.data.with.tickvalue <- function(price.data,
+                                      get.open.fun=DB.O, tickvalue.timeframe='M1', currency=DEFAULT.CURRENCY,
+                                      symbols.setting=SYMBOLS.SETTING) {
   serie.columns <- c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING')
+  symbols <- names(price.data)
   lapply(symbols, function(symbol) {
     price.data[[symbol]] %>%
       extract(j = tick.value := cal.tick.value(symbol, time, get.open.fun, tickvalue.timeframe,
@@ -155,8 +182,9 @@ price.data <- function(tickets.edited, tickets.period, get.ohlc.fun=DB.OHLC, tim
     set_names(symbols)
 }
 
-timeseries <- function(tickets.edited, price.data, symbols.setting=SYMBOLS.SETTING) {
-  tickets.serie <- timeseries.tickets(tickets.edited, price.data, symbols.setting)
+#### TIMESERIES ####
+timeseries <- function(tickets.edited, price.data.for.timeseries, symbols.setting=SYMBOLS.SETTING) {
+  tickets.serie <- timeseries.tickets(tickets.edited, price.data.for.timeseries, symbols.setting)
   symbols.serie <- timeseries.symbols(tickets.serie)
   account.serie <- timeseries.account(symbols.serie)
   list(
@@ -219,19 +247,19 @@ timeseries.account <- function(timeseries.symbols) {
   }
   account.table <- 0
   # print(timeseries.symbols[[1]])
-  union.time <- (timeseries.symbols[[1]])[, time]
+  intersection.time <- (timeseries.symbols[[1]])[, time]
   len <- length(timeseries.symbols)
   if (len > 1) {
     lapply(timeseries.symbols[2:len], function(symbol.serie) {
-      union.time <<- union(union.time, symbol.serie[, time])
+      intersection.time <<- intersection(intersection, symbol.serie[, time])
     })
   }
   lapply(timeseries.symbols, function(symbol.serie) {
     account.table <<- account.table +
-      symbol.serie[.(union.time), c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME')]
+      symbol.serie[.(intersection.time), c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME')]
   })
   account.table %>%
-    extract(j = time := union.time) %>%
+    extract(j = time := intersection.time) %>%
     setkey(time)
 } # FINISH
 

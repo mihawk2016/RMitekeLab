@@ -5,33 +5,11 @@ compilePKGS(T)
 ## 2017-02-12: Version 0.1
 
 #### INFOS TABLE ####
-INFOS.COLUMNS <- c('PATH', 'FILE', 'TYPE', 'ACCOUNT', 'NAME', 'BROKER', 'CURRENCY', 'LEVERAGE', 'TIME')
+INFOS.COLUMNS <- c('FILE', 'TYPE', 'ACCOUNT', 'NAME', 'BROKER', 'CURRENCY', 'LEVERAGE', 'TIME')
 INFOS.TABLE <-
   data.table(
     matrix(ncol = length(INFOS.COLUMNS), dimnames = list(NULL, INFOS.COLUMNS))
   )
-
-#### INFOS ENVIRONMENT ####
-init.infos <- function() {
-  assign('INFOS', list(), envir = METAQUOTE.ANALYSTIC)
-}
-
-get.infos <- function(index) {
-  infos <- get('INFOS', envir = METAQUOTE.ANALYSTIC)
-  if (!missing(index)) {
-    infos <- infos[index]
-  }
-  infos
-}
-
-init.infos.temp <- function() {
-  assign('INFOS.TEMP', copy(INFOS.TABLE), envir = METAQUOTE.ANALYSTIC)
-}
-
-append.to.infos <- function() {
-  # with(METAQUOTE.ANALYSTIC, INFOS <- c(INFOS, list(INFOS.TEMP)))
-  METAQUOTE.ANALYSTIC$INFOS <- c(METAQUOTE.ANALYSTIC$INFOS, list(METAQUOTE.ANALYSTIC$INFOS.TEMP))
-}
 
 #### FETCH INFOS ####
 fetch.html.data.infos.mt4ea <- function(mq.file.parse) {
@@ -40,22 +18,30 @@ fetch.html.data.infos.mt4ea <- function(mq.file.parse) {
   first.table <- xml_find_first(mq.file.parse, '//table')
   time.string <- xml_text(xml_find_all(first.table, '//td')[4])
   nchar.time.string <- nchar(time.string)
-  set.infos.type('MT4-EA')
-  set.infos.name(head.lines[1])
-  set.infos.broker(head.lines[2])
-  set.infos.time(substr(time.string, nchar.time.string - 10, nchar.time.string - 1))
+  copy(INFOS.TABLE) %>%
+    extract(
+      j = c('TYPE', 'NAME', 'BROKER', 'TIME') :=
+        list('MT4-EA',
+             format.infos.name(head.lines[1]),
+             format.infos.broker(head.lines[2]),
+             format.infos.time(substr(time.string, nchar.time.string - 10, nchar.time.string - 1)))
+    )
 } # FINISH
 
 fetch.html.data.infos.mt4trade <- function(mq.file.parse) {
   
   first.row <- xml_text(xml_find_all(xml_find_first(xml_find_first(mq.file.parse, '//table'), './/tr'), './/b'))
-  set.infos.type('MT4-Trade')
-  set.infos.account(first.row[grep('Account', first.row)])
-  set.infos.name(first.row[grep('Name', first.row)])
-  set.infos.broker(xml_text(xml_find_first(mq.file.parse, '//b')))
-  set.infos.currency(first.row[grep('Currency', first.row)])
-  set.infos.leverage(first.row[grep('Leverage', first.row)])
-  set.infos.time(tail(first.row, 1))
+  copy(INFOS.TABLE) %>%
+    extract(
+      j = c('TYPE', 'ACCOUNT', 'NAME', 'BROKER', 'CURRENCY', 'LEVERAGE', 'TIME') :=
+        list('MT4-Trade',
+             format.infos.account(first.row[grep('Account', first.row)]),
+             format.infos.name(first.row[grep('Name', first.row)]),
+             format.infos.broker(xml_text(xml_find_first(mq.file.parse, '//b'))),
+             format.infos.currency(first.row[grep('Currency', first.row)]),
+             format.infos.leverage(first.row[grep('Leverage', first.row)]),
+             format.infos.time(tail(first.row, 1)))
+    )
 } # FINISH
 
 fetch.html.data.infos.mt5ea <- function(mq.file.parse) {
@@ -63,73 +49,44 @@ fetch.html.data.infos.mt5ea <- function(mq.file.parse) {
   table.values <- xml_text(xml_find_all(xml_find_first(mq.file.parse, '//table'), './/td'))
   time.string <- table.values[grep('Period:', table.values) + 1]
   nchar.time.string <- nchar(time.string)
-  set.infos.type('MT5-EA')
-  set.infos.name(table.values[grep('Expert:', table.values) + 1])
-  set.infos.broker(table.values[grep('Broker:', table.values) + 1])
-  set.infos.currency(table.values[grep('Currency:', table.values) + 1])
-  set.infos.leverage(table.values[grep('Leverage:', table.values) + 1])
-  set.infos.time(substr(time.string, nchar.time.string - 10, nchar.time.string - 1))
+  copy(INFOS.TABLE) %>%
+    extract(
+      j = c('TYPE', 'NAME', 'BROKER', 'CURRENCY', 'LEVERAGE', 'TIME') :=
+        list('MT5-EA',
+             format.infos.name(table.values[grep('Expert:', table.values) + 1]),
+             format.infos.broker(table.values[grep('Broker:', table.values) + 1]),
+             format.infos.currency(table.values[grep('Currency:', table.values) + 1]),
+             format.infos.leverage(table.values[grep('Leverage:', table.values) + 1]),
+             format.infos.time(substr(time.string, nchar.time.string - 10, nchar.time.string - 1)))
+    )
 } # FINISH
 
 fetch.html.data.infos.mt5trade <- function(mq.file.parse) {
   
   table.values <- xml_text(xml_find_all(xml_find_first(mq.file.parse, '//table'), './/th'))
   account.currency.leverage <- table.values[grep('Account:', table.values) + 1]
-  set.infos.type('MT5-Trade')
-  set.infos.account(account.currency.leverage)
-  set.infos.name(table.values[grep('Name:', table.values) + 1])
-  set.infos.broker(table.values[grep('Broker:', table.values) + 1])
-  set.infos.currency(account.currency.leverage)
-  set.infos.leverage(account.currency.leverage)
-  set.infos.time(format.infos.time(table.values[grep('Date:', table.values) + 1]) - 8 * 3600)
+  copy(INFOS.TABLE) %>%
+    extract(
+      j = c('TYPE', 'ACCOUNT', 'NAME', 'BROKER', 'CURRENCY', 'LEVERAGE', 'TIME') :=
+        list('MT5-Trade',
+             format.infos.account(account.currency.leverage),
+             format.infos.name(table.values[grep('Name:', table.values) + 1]),
+             format.infos.broker(table.values[grep('Broker:', table.values) + 1]),
+             format.infos.currency(account.currency.leverage),
+             format.infos.leverage(account.currency.leverage),
+             format.infos.time(format.infos.time(table.values[grep('Date:', table.values) + 1]) - 8 * 3600))
+    )
 } # FINISH
 
 fetch.html.data.infos.mt4m_closed <- function() {
-  set.infos.type('MT4M-Closed')
+  copy(INFOS.TABLE) %>%
+    extract(j = TYPE := 'MT4M-Closed')
 } # FINISH
 
 fetch.html.data.infos.mt4m_raw <- function() {
-  set.infos.type('MT4M-Raw')
+  copy(INFOS.TABLE) %>%
+    extract(j = TYPE := 'MT4M-Raw')
 } # FINISH
-
-#### INFOS SETTER ####
-set.infos.path <- function(value) {
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = PATH := value]
-}
-
-set.infos.file <- function(value) {
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = FILE := value]
-  append.to.infos()
-}
-
-set.infos.type <- function(value) {
-  init.infos.temp()
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = TYPE := value]
-}
-
-set.infos.account <- function(value) {
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = ACCOUNT := format.infos.account(value)]
-}
-
-set.infos.name <- function(value) {
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = NAME := format.infos.name(value)]
-}
-
-set.infos.broker <- function(value) {
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = BROKER := format.infos.broker(value)]
-}
-
-set.infos.currency <- function(value) {
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = CURRENCY := format.infos.currency(value)]
-}
-
-set.infos.leverage <- function(value) {
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = LEVERAGE := format.infos.leverage(value)]
-}
-
-set.infos.time <- function(value) {
-  METAQUOTE.ANALYSTIC$INFOS.TEMP[j = TIME := format.infos.time(value)]
-}
 
 #### FORMAT ####
 format.infos.account <- function(account) {

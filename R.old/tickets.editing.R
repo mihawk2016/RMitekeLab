@@ -15,3 +15,9 @@ tickets.editing <- function(tickets.supported, with.open=FALSE) {
   ## ToDo: recalculate profit etc. with open tickets, then return open $ closed
   
 }
+
+# generate.tickets.editing2 <- function(report) {
+#   lapply(report, function(r) {
+#     within(r, TICKETS.EDITING <- tickets.editing(r$TICKETS.SUPPORTED))
+#   })
+# }

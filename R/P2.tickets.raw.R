@@ -109,20 +109,9 @@ fetch.html.tickets <- function(file, parse, infos, index, default.currency=DEFAU
 
 fetch.html.tickets2 <- function(report, index, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
                                 get.open.fun=DB.O, mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
-  # within(report, {
-  #   CURRENCY <- report.currency(report$INFOS, default.currency)
-  #   LEVERAGE <- report.leverage(report$INFOS, default.leverage)
-  #   TICKETS.RAW <- tickets.raw(report$INFOS[, TYPE], report$PATH, report$HTML.PARSE,
-  #                              CURRENCY, get.open.fun, mysql.setting, timeframe, symbols.setting) %>%
-  #     extract(j = FILE.INDEX := index)
-  #   ITEM.SYMBOL.MAPPING <- item.symbol.mapping(TICKETS.RAW, symbols.setting[, SYMBOL])
-  #   SUPPORTED.ITEM <- supported.items(ITEM.SYMBOL.MAPPING)
-  #   UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
-  #   TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING)
-  #   TICKETS.EDITING <- tickets.editing(TICKETS.SUPPORTED)
-  # })
-  fetch.html.tickets(report$PATH, report$HTML.PARSE, report$PATH, index,
-                     default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)
+  with(report, {
+    fetch.html.tickets(PATH, HTML.PARSE, PATH, index, default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)
+  })
 }
 
 tickets.raw <- function(type, file, parse, currency, get.open.fun=DB.O, mysql.setting=MYSQL.SETTING,
@@ -139,105 +128,6 @@ tickets.raw <- function(type, file, parse, currency, get.open.fun=DB.O, mysql.se
     )
   })
 } # FINISH
-
-#### FETCH TICKETS ####
-# fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, mysql.setting, timeframe='M1',
-#                                           currency, symbols.setting=SYMBOLS.SETTING) {
-#   table <-
-#     readHTMLTable(mq.file, stringsAsFactors = FALSE, encoding = 'GBK', which = 2,
-#                   colClasses = c('character', time.char.to.num, 'character', num.char.to.num, num.char.to.num,
-#                                  num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character')) %>%
-#     as.data.table %>%
-#     set_colnames(c('deal', 'time', 'type', 'ticket', 'volume', 'price', 'sl', 'tp', 'profit', 'balance')) %>%
-#     extract(type != 'modify', -c('deal', 'balance'))
-#   mq.file.parse <- read_html(mq.file, encoding = 'GBK')
-#   xml.text <-
-#     xml_find_first(mq.file.parse, './/table')
-    # mq.file.parse %>%
-    # xml_find_first('.//table') %>%
-    # xml_find_all('.//td') %>%
-    # xml_text
-  # deposit <-
-  #   xml.text %>%
-  #   extract(24) %>%
-  #   as.numeric
-  # time.string <- xml.text[4]
-  # len.time.string <- nchar(time.string)
-  # deposit.time <-
-  #   time.string %>%
-  #   substr(len.time.string - 23, len.time.string - 14) %>%
-  #   format.time.all.to.numeric
-  # end.time <-
-  #   time.string %>%
-  #   substr(len.time.string - 10, len.time.string - 1) %>%
-  #   format.time.all.to.numeric
-  # money.tickets <-
-  #   data.table(
-  #     TICKET = 0,
-  #     OTIME = 13,
-  #     PROFIT = 100,
-  #     GROUP = 'MONEY'
-  #   )
-  #   ) %>%
-  #   build.tickets('MONEY')
-  # rows <- nrow(table)
-  # if (!rows) {
-  #   return(money.tickets)
-  # }
-  # item <-
-  #   xml.text %>%
-  #   extract(2) %>%
-  #   gsub(' ([ \\(\\)[:alpha:]])*', '', .)
-  # table.index <- 1:rows
-  # table.types <- table[, type]
-  # table.tickets <- table[, ticket]
-  # pending.close.part.index <- which(table.types == 'delete')
-  # if (length(pending.close.part.index)) {
-  #   pending.tickets.ticket <- table.tickets[pending.close.part.index]
-  #   table.index %<>% setdiff(pending.close.part.index)
-  #   pending.open.part.index <- table.index[table.tickets[table.index] %in% pending.tickets.ticket]
-  #   table.index %<>% setdiff(pending.open.part.index)
-  #   merge(table[pending.open.part.index], table[pending.close.part.index], by = 'ticket') %>%
-  #     set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
-  #                    'CTIME', '', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
-  #     extract(j = (c('ITEM', 'COMMENT', 'TYPE')) := list(item, 'canceled', toupper(TYPE))) %>%
-  #     build.tickets('PENDING')
-  # }
-  # pending.of.closed.ticktets.index <- table.index[grepl('(buy|sell) (limit|stop)', table.types[table.index], ignore.case = TRUE)]
-  # if (length(pending.of.closed.ticktets.index) ) {
-  #   table.index %<>% setdiff(pending.of.closed.ticktets.index)
-  # }
-  # if (length(table.index)) {
-  #   closed.tickets.open.part.index <- table.index[grepl('(buy|sell)', table.types[table.index], ignore.case = TRUE)]
-  #   closed.tickets.close.part.index <- table.index %<>% setdiff(closed.tickets.open.part.index)
-  #   closed.tickets <- merge(table[closed.tickets.open.part.index], table[closed.tickets.close.part.index], by = 'ticket')
-  #   part.closed.index <- which(closed.tickets[, volume.x != volume.y])
-  #   if (length(part.closed.index)) {
-  #     closed.tickets[part.closed.index, volume.x := volume.y]
-  #     closed.tickets[part.closed.index + 1, time.x := NA]
-  #     closed.tickets[, time.x := na.locf(time.x)]
-  #   }
-  #   closed.tickets %<>%
-  #     set_colnames(c('TICKET', 'OTIME', 'TYPE', '', 'OPRICE', '', '', '',
-  #                    'CTIME', 'COMMENT', 'VOLUME', 'CPRICE', 'SL', 'TP', 'PROFIT')) %>%
-  #     extract(j = c('ITEM', 'TYPE') := list(item, toupper(TYPE))) %>%
-  #     extract(CTIME >= end.time - 60 & COMMENT == 'close at stop', EXIT := paste(COMMENT, 'so', sep = ' / '))
-  #   symbol <- item.to.symbol(item)
-  #   if (!is.na(symbol)) {
-  #     if (is.na(currency)) {
-  #       currency <- DEFAULT.CURRENCY
-  #     }
-  #     closed.tickets[, c('SWAP', 'PROFIT') := {
-  #       pips <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
-  #       tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, mysql.setting, timeframe, currency, symbols.setting)
-  #       new.profit <- cal.profit(VOLUME, tickvalue, pips)
-  #       list(PROFIT - new.profit, new.profit)
-  #     }]
-  #   }
-  #   build.tickets(closed.tickets, 'CLOSED')
-  # }
-  # build.tickets.raw()
-# } # FINISH
 
 fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, mysql.setting, timeframe='M1',
                                           currency, symbols.setting=SYMBOLS.SETTING) {
