@@ -8,6 +8,29 @@ compilePKGS(T)
 ## 2017-02-17: Version 0.1
 
 ## additional tickets column: PIP, NPROFIT, RESULT, LOT.PROFIT
+reports.PHASE3 <- function(report.phase2,
+                           set.init.money=NULL, include.middle=TRUE, default.money=DEFAULT.INIT.MONEY,
+                           currency=DEFAULT.CURRENCY, get.open.fun=DB.O, timeframe.tickvalue='M1',
+                           get.ohlc.fun=DB.OHLC, timeframe.report='H1', parallel.db=PARALLEL.THRESHOLD.DB.SYMBOLS,
+                           symbols.setting=SYMBOLS.SETTING, parallel.tickets=PARALLEL.THRESHOLD.GENERATE.TICKETS) {
+  if (is.numeric(parallel)) {
+    parallel <- length(report) >= parallel
+  }
+  if (!parallel) {
+    phase3data <- mapply(report.PHASE3, report.phase2,
+                         MoreArgs = list(set.init.money, include.middle, default.money, currency, get.open.fun, timeframe.tickvalue,
+                                         get.ohlc.fun, timeframe.report, parallel.db, symbols.setting, parallel.tickets),
+                         SIMPLIFY = FALSE, USE.NAMES = FALSE)
+  } else {
+    cluster <- makeCluster(detectCores() - 1)
+    phase3data <- clusterMap(cluster, report.PHASE3, report.phase2,
+                             MoreArgs = list(set.init.money, include.middle, default.money, currency, get.open.fun, timeframe.tickvalue,
+                                             get.ohlc.fun, timeframe.report, parallel.db, symbols.setting, parallel.tickets),
+                             SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    stopCluster(cluster)
+  }
+  phase3data
+}
 
 report.PHASE3 <- function(report.phase2,
                           set.init.money=NULL, include.middle=TRUE, default.money=DEFAULT.INIT.MONEY,
@@ -24,6 +47,7 @@ report.PHASE3 <- function(report.phase2,
     ), symbols.setting)
     TIMESERIE.SYMBOLS <- timeseries.symbols(TIMESERIE.TICKETS)
     TIMESERIE.ACCOUNT <- timeseries.account(TIMESERIE.SYMBOLS)
+    PHASE <- 3
   })
 }
 

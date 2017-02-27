@@ -70,10 +70,10 @@ generate.html.tickets <- function(file, parse, infos, index,
   phase2data
 }
 
-generate.html.tickets2 <- function(report, index,
-                                   default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE, get.open.fun=DB.O,
-                                   mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING,
-                                   parallel=PARALLEL.THRESHOLD.GENERATE.TICKETS) {
+reports.PHASE2 <- function(report, index,
+                           default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE, get.open.fun=DB.O,
+                           mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING,
+                           parallel=PARALLEL.THRESHOLD.GENERATE.TICKETS) {
   if (is.numeric(parallel)) {
     parallel <- length(report) >= parallel
   }
@@ -108,10 +108,11 @@ fetch.html.tickets <- function(file, parse, infos, index, default.currency=DEFAU
     UNSUPPORTED.ITEM <- unsupported.items(ITEM.SYMBOL.MAPPING)
     TICKETS.SUPPORTED <- tickets.supported(TICKETS.RAW, ITEM.SYMBOL.MAPPING)
     TICKETS.EDITING <- tickets.editing(TICKETS.SUPPORTED)
+    PHASE <- 2
   })
 }
 
-report.PHASE2 <- function(report, index, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
+fetch.html.tickets2 <- function(report, index, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
                                 get.open.fun=DB.O, mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   with(report, {
     fetch.html.tickets(PATH, HTML.PARSE, PATH, index, default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)

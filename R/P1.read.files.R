@@ -68,6 +68,7 @@ fetch.file.data <- function(mq.file, mq.file.name) {
       INFOS %<>%
         extract(j = FILE := mq.file.name)
       PATH <- mq.file
+      PHASE <- 1
     })
   }
 }
