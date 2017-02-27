@@ -2,12 +2,6 @@ library(compiler)
 compilePKGS(T)
 
 
-
-
-
-
-
-
 #### TICKETS ####
 output.tickets <- function(tickets, groups, columns, file.name) {
   tickets %>%
@@ -21,16 +15,11 @@ output.tickets <- function(tickets, groups, columns, file.name) {
             'CTIME', 'CPRICE', 'COMMISSION', 'TAXES', 'SWAP', 'PROFIT', columns)
     ) %>%
     write.csv(file = file.name)
-} #
-
+} # FINISH
 
 #### UTILS ####
 output.file.name <- function(infos, type=c('REPORT', 'TICKETS')) {
-  if (nrow(infos) == 1) {
-    infos[, FILE]
-  } else {
-    'FileSet'
-  } %>%
+  ifelse(nrow(infos) == 1, infos[, FILE], 'FileSet') %>%
     sprintf('%s-%s', substr(type, 1, 1), .)
-}
+} # FINISH
 
