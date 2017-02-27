@@ -33,8 +33,6 @@ statistics.and.timeseries <- function(tickets.editing, currency=DEFAULT.CURRENCY
                                       symbols.setting=SYMBOLS.SETTING) {
   within(list(), {
     TICKETS.EDITED <- tickets.edited(tickets.editing, currency, get.open.fun, timeframe.tickvalue, symbols.setting)
-    # money.tickets <- function(tickets.supported, set.init.money=NULL, include.middle=TRUE, default.money=DEFAULT.INIT.MONEY)
-    # TICKETS.MONEY <- tickets.money()
     PERIOD <- tickets.period(TICKETS.EDITED)
     PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, parallel)
     TIMESERIE.TICKETS <- timeseries.tickets(tickets.edited, PRICE %>% price.data.with.tickvalue(
@@ -253,11 +251,12 @@ timeseries.symbols <- function(timeserie.tickets, money.tickets) {
           ticket.serie[, .(BALANCE.DELTA = PROFIT + FLOATING, NET.VOLUME = PL.VOLUME, SUM.VOLUME = VOLUME)]
       })
     symbol.table %>%
-      extract(j = c('time', 'MONEY', 'EQUITY') := {
+      extract(j = c('time', 'MONEY', 'EQUITY', 'RETURN') := {
         serie.time <- symbol.list[[1]][, time]
         money.delta <- money.delta(money.tickets, serie.time)
         equity <- BALANCE.DELTA + cumsum(money.delta)
-        list(serie.time, money.delta, equity)
+        returns <- c(0, diff(BALANCE.DELTA) / equity[-length(equity)])
+        list(serie.time, money.delta, equity, returns)
       }) %>%
       setkey(time) %>%
       list %>%
@@ -266,14 +265,6 @@ timeseries.symbols <- function(timeserie.tickets, money.tickets) {
   })
   setNames(env.symbols.series, names(timeserie.tickets))
 } # FINISH
-
-# money.delta <- function(tickets.money, time.vector) {
-#   serie <- vector('numeric', length(time.vector))
-#   mapply(function(time, value) {
-#     serie[which(serie > value)[1]] <<- value
-#   }, tickets.money[, 'OTIME'], tickets.money[, 'PROFIT'])
-#   serie
-# }
 
 timeseries.account <- function(timeseries.symbols) {
   len <- length(timeseries.symbols)

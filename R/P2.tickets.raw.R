@@ -7,6 +7,10 @@ compilePKGS(T)
 #### @PATCH NOTE@ ####
 ## 2017-02-12: Version 0.1
 
+#### ENVIRONMENT ####
+METAQUOTE.ANALYSTIC <- new.env(parent = baseenv())
+assign('TICKETS.TEMP', list(), envir = METAQUOTE.ANALYSTIC)
+
 #### TICKETS COLUMNS ####
 TICKETS.COLUMNS <- list(
   UNIFORM = c('TICKET', 'OTIME', 'TYPE', 'VOLUME', 'ITEM', 'OPRICE', 'SL', 'TP',
@@ -107,7 +111,7 @@ fetch.html.tickets <- function(file, parse, infos, index, default.currency=DEFAU
   })
 }
 
-fetch.html.tickets2 <- function(report, index, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
+report.PHASE2 <- function(report, index, default.currency=DEFAULT.CURRENCY, default.leverage=DEFAULT.LEVERAGE,
                                 get.open.fun=DB.O, mysql.setting=MYSQL.SETTING, timeframe='M1', symbols.setting=SYMBOLS.SETTING) {
   with(report, {
     fetch.html.tickets(PATH, HTML.PARSE, PATH, index, default.currency, default.leverage, get.open.fun, mysql.setting, timeframe, symbols.setting)
