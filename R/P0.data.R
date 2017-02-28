@@ -105,7 +105,8 @@ mysql.price.ohlc <- function(symbol, from, to, timeframe='H1', setting=MYSQL.SET
     set_names(symbol) %>%
     lapply(function(price.table) {
       price.table[j = time := time.char.to.num(time)] %>%
-        setkey(time)
+        setnames(toupper(names(.))) %>%
+        setkey(TIME)
     })
 } # FINISH
 

@@ -45,8 +45,8 @@ report.PHASE3 <- function(report.phase2,
     PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, mysql.setting, parallel)# %T>% print
     TIMESERIE.TICKETS <- timeseries.tickets(TICKETS.EDITED, PRICE %>% price.data.with.tickvalue(
       get.open.fun, timeframe.tickvalue, currency, mysql.setting, symbols.setting), symbols.setting)# %T>% print
-    TIMESERIE.SYMBOLS <- timeseries.symbols(TIMESERIE.TICKETS, TICKETS.MONEY) %T>% print
-    TIMESERIE.ACCOUNT <- timeseries.account(TIMESERIE.SYMBOLS, TICKETS.MONEY) %T>% print
+    TIMESERIE.SYMBOLS <- timeseries.symbols(TIMESERIE.TICKETS, TICKETS.MONEY)# %T>% print
+    TIMESERIE.ACCOUNT <- timeseries.account(TIMESERIE.SYMBOLS, TICKETS.MONEY)# %T>% print
     PHASE <- 3
   })
 }
@@ -221,7 +221,7 @@ price.data.with.tickvalue <- function(price.data,
   symbols <- names(price.data)
   lapply(symbols, function(symbol) {
     price.data[[symbol]] %>%
-      extract(j = tick.value := cal.tick.value(symbol, time, get.open.fun, mysql.setting, tickvalue.timeframe,
+      extract(j = TICKVALUE := cal.tick.value(symbol, TIME, get.open.fun, mysql.setting, tickvalue.timeframe,
                                                currency, symbols.setting)) %>%
       extract(j = (serie.columns) := 0)
   }) %>%
@@ -278,14 +278,14 @@ timeseries.symbols <- function(timeserie.tickets, money.tickets) {
           ticket.serie[, .(BALANCE.DELTA = PROFIT + FLOATING, NET.VOLUME = PL.VOLUME, SUM.VOLUME = VOLUME)]
       })
     symbol.table %>%
-      extract(j = c('time', 'MONEY', 'EQUITY', 'RETURN') := {
-        serie.time <- symbol.list[[1]][, time]
+      extract(j = c('TIME', 'MONEY', 'EQUITY', 'RETURN') := {
+        serie.time <- symbol.list[[1]][, TIME]
         money.delta <- money.delta(money.tickets, serie.time)
         equity <- BALANCE.DELTA + cumsum(money.delta)
         returns <- c(0, diff(BALANCE.DELTA) / equity[-length(equity)])
         list(serie.time, money.delta, equity, returns)
       }) %>%
-      setkey(time) %>%
+      setkey(TIME) %>%
       list %>%
       append(env.symbols.series, .) %>%
       assign('env.symbols.series', ., envir = fun.env)
@@ -301,7 +301,7 @@ timeseries.account <- function(timeseries.symbols, money.tickets) {
   account.table <- 0
   intersection.time <-
     lapply(timeseries.symbols, function(ts) {
-      ts[, time]
+      ts[, TIME]
     }) %>%
     do.call(c, .) %>%
     table %>%
@@ -314,44 +314,44 @@ timeseries.account <- function(timeseries.symbols, money.tickets) {
       symbol.serie[.(intersection.time), c('BALANCE.DELTA', 'NET.VOLUME', 'SUM.VOLUME')]
   })
   account.table %>%
-    extract(j = c('time', 'MONEY', 'EQUITY', 'RETURN') := {
+    extract(j = c('TIME', 'MONEY', 'EQUITY', 'RETURN') := {
       money.delta <- money.delta(money.tickets, intersection.time)
       equity <- BALANCE.DELTA + cumsum(money.delta)
       returns <- c(0, diff(BALANCE.DELTA) / equity[-length(equity)])
       list(intersection.time, money.delta, equity, returns)
     }) %>%
-    setkey(time)
+    setkey(TIME)
 } # FINISH
 
 timeseries.one.ticket <- function(otime, ctime, nprofit, type, volume,
                                      oprice, digit, spread, symbol.price.data) {
   copy(symbol.price.data) %>%
-    setkey(time) %>%
-    extract(time >= ctime, PROFIT := nprofit) %>%
+    setkey(TIME) %>%
+    extract(TIME >= ctime, PROFIT := nprofit) %>%
     extract(
-      i = time >= otime & time < ctime,
+      i = TIME >= otime & TIME < ctime,
       j = c('FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING') := {
         digit.factor <- 10 ^ digit
         if (type == 'BUY') {
           pl.volume <- volume
-          floating.pip <- (open - oprice) * digit.factor
-          max.floating.pip <- (high - oprice) * digit.factor
-          min.floating.pip <- (low - oprice) * digit.factor
+          floating.pip <- (OPEN - oprice) * digit.factor
+          max.floating.pip <- (HIGH - oprice) * digit.factor
+          min.floating.pip <- (LOW - oprice) * digit.factor
         } else {
           pl.volume <- -volume
-          floating.pip <- (oprice - open) * digit.factor - spread
-          max.floating.pip <- (oprice - low) * digit.factor - spread
-          min.floating.pip <- (oprice - high) * digit.factor - spread
+          floating.pip <- (oprice - OPEN) * digit.factor - spread
+          max.floating.pip <- (oprice - LOW) * digit.factor - spread
+          min.floating.pip <- (oprice - HIGH) * digit.factor - spread
         }
-        list(cal.profit(volume, tick.value, floating.pip), pl.volume, volume,
-             cal.profit(volume, tick.value, max.floating.pip),
-             cal.profit(volume, tick.value, min.floating.pip))
+        list(cal.profit(volume, TICKVALUE, floating.pip), pl.volume, volume,
+             cal.profit(volume, TICKVALUE, max.floating.pip),
+             cal.profit(volume, TICKVALUE, min.floating.pip))
       }
     ) %>%
     extract(
-      j = c('open', 'high', 'low', 'close', 'tick.value') := NULL
+      j = c('OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVALUE') := NULL
     ) %>%
-    setkey(time)
+    setkey(TIME)
 } # FINISH
 
 #### MONEY ####
