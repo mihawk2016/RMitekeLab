@@ -12,20 +12,21 @@ reports.PHASE3 <- function(report.phase2,
                            set.init.money=NULL, include.middle=TRUE, default.money=DEFAULT.INIT.MONEY,
                            currency=DEFAULT.CURRENCY, get.open.fun=DB.O, timeframe.tickvalue='M1',
                            get.ohlc.fun=DB.OHLC, timeframe.report='H1', parallel.db=PARALLEL.THRESHOLD.DB.SYMBOLS,
-                           symbols.setting=SYMBOLS.SETTING, parallel.tickets=PARALLEL.THRESHOLD.GENERATE.TICKETS) {
-  if (is.numeric(parallel)) {
-    parallel <- length(report) >= parallel
+                           symbols.setting=SYMBOLS.SETTING, parallel.tickets=PARALLEL.THRESHOLD.GENERATE.TICKETS,
+                           mysql.setting=MYSQL.SETTING) {
+  if (is.numeric(parallel.tickets)) {
+    parallel.tickets <- length(report.phase2) >= parallel.tickets
   }
-  if (!parallel) {
+  if (!parallel.tickets) {
     phase3data <- mapply(report.PHASE3, report.phase2,
                          MoreArgs = list(set.init.money, include.middle, default.money, currency, get.open.fun, timeframe.tickvalue,
-                                         get.ohlc.fun, timeframe.report, parallel.db, symbols.setting, parallel.tickets),
+                                         get.ohlc.fun, timeframe.report, parallel.db, symbols.setting, mysql.setting),
                          SIMPLIFY = FALSE, USE.NAMES = FALSE)
   } else {
     cluster <- makeCluster(detectCores() - 1)
     phase3data <- clusterMap(cluster, report.PHASE3, report.phase2,
                              MoreArgs = list(set.init.money, include.middle, default.money, currency, get.open.fun, timeframe.tickvalue,
-                                             get.ohlc.fun, timeframe.report, parallel.db, symbols.setting, parallel.tickets),
+                                             get.ohlc.fun, timeframe.report, parallel.db, symbols.setting, mysql.setting),
                              SIMPLIFY = FALSE, USE.NAMES = FALSE)
     stopCluster(cluster)
   }
@@ -36,17 +37,16 @@ report.PHASE3 <- function(report.phase2,
                           set.init.money=NULL, include.middle=TRUE, default.money=DEFAULT.INIT.MONEY,
                           currency=DEFAULT.CURRENCY, get.open.fun=DB.O, timeframe.tickvalue='M1',
                           get.ohlc.fun=DB.OHLC, timeframe.report='H1', parallel=PARALLEL.THRESHOLD.DB.SYMBOLS,
-                          symbols.setting=SYMBOLS.SETTING) {
+                          symbols.setting=SYMBOLS.SETTING, mysql.setting=MYSQL.SETTING) {
   within(report.phase2, {
-    TICKETS.EDITED <- tickets.edited(tickets.editing, currency, get.open.fun, timeframe.tickvalue, symbols.setting)
-    TICKETS.MONEY <- tickets.money(TICKETS.SUPPORTED, set.init.money, include.middle, default.money)
-    PERIOD <- tickets.period(TICKETS.EDITED)
-    PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, parallel)
-    TIMESERIE.TICKETS <- timeseries.tickets(tickets.edited, PRICE %>% price.data.with.tickvalue(
-      get.open.fun, timeframe.tickvalue, currency, symbols.setting
-    ), symbols.setting)
-    TIMESERIE.SYMBOLS <- timeseries.symbols(TIMESERIE.TICKETS)
-    TIMESERIE.ACCOUNT <- timeseries.account(TIMESERIE.SYMBOLS)
+    TICKETS.EDITED <- tickets.edited(TICKETS.EDITING, CURRENCY, get.open.fun, timeframe.tickvalue, symbols.setting)
+    TICKETS.MONEY <- tickets.money(TICKETS.SUPPORTED, set.init.money, include.middle, default.money)# %T>% print
+    PERIOD <- tickets.period(TICKETS.EDITED)# %T>% print
+    PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, mysql.setting, parallel)# %T>% print
+    TIMESERIE.TICKETS <- timeseries.tickets(TICKETS.EDITED, PRICE %>% price.data.with.tickvalue(
+      get.open.fun, timeframe.tickvalue, currency, mysql.setting, symbols.setting), symbols.setting)# %T>% print
+    TIMESERIE.SYMBOLS <- timeseries.symbols(TIMESERIE.TICKETS, TICKETS.MONEY) %T>% print
+    TIMESERIE.ACCOUNT <- timeseries.account(TIMESERIE.SYMBOLS, TICKETS.MONEY) %T>% print
     PHASE <- 3
   })
 }
@@ -54,9 +54,9 @@ report.PHASE3 <- function(report.phase2,
 
 statistics.and.timeseries <- function(tickets.editing, currency=DEFAULT.CURRENCY, get.open.fun=DB.O, timeframe.tickvalue='M1',
                                       get.ohlc.fun=DB.OHLC, timeframe.report='H1', parallel=PARALLEL.THRESHOLD.DB.SYMBOLS,
-                                      symbols.setting=SYMBOLS.SETTING) {
+                                      symbols.setting=SYMBOLS.SETTING, mysql.setting=MYSQL.SETTING) {
   within(list(), {
-    TICKETS.EDITED <- tickets.edited(tickets.editing, currency, get.open.fun, timeframe.tickvalue, symbols.setting)
+    TICKETS.EDITED <- tickets.edited(tickets.editing, currency, get.open.fun, mysql.setting, symbols.setting, mysql.setting)
     PERIOD <- tickets.period(TICKETS.EDITED)
     PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, parallel)
     TIMESERIE.TICKETS <- timeseries.tickets(tickets.edited, PRICE %>% price.data.with.tickvalue(
@@ -66,20 +66,21 @@ statistics.and.timeseries <- function(tickets.editing, currency=DEFAULT.CURRENCY
     TIMESERIE.ACCOUNT <- timeseries.account(TIMESERIE.SYMBOLS)
   })
 }
-
+  
 tickets.edited <- function(tickets.editing, currency=DEFAULT.CURRENCY, get.open.fun=DB.O, timeframe='M1',
-                           symbols.setting=SYMBOLS.SETTING) {
+                           symbols.setting=SYMBOLS.SETTING, mysql.setting) {
   tickets.editing %>%
+    copy %>%
     setkey(SYMBOL) %>%
-    extract(j = c('PIP', 'PROFIT') := {
+    extract(j = c('PIP', 'PROFIT', 'NPROFIT') := {
       symbol <- SYMBOL[1]
       pip <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
-      tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, timeframe, currency, symbols.setting)
+      tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, mysql.setting, timeframe, currency, symbols.setting)
       profit <- cal.profit(VOLUME, tickvalue, pip)
-      list(pip, profitt)
+      list(pip, profit, COMMISSION + TAXES + SWAP + PROFIT)
     }, by = SYMBOL) %>%
-    extract(j = c('NPROFIT', 'LOT.PROFIT', 'RESULT', 'PERIOD') :=
-              list(COMMISSION + TAXES + SWAP + PROFIT, PROFIT / VOLUME, ifelse(NPROFIT >= 0, 'PROFIT', 'LOSS'), CTIME - OTIME))
+    extract(j = c('LOT.PROFIT', 'RESULT', 'PERIOD') :=
+              list(PROFIT / VOLUME, ifelse(NPROFIT >= 0, 'PROFIT', 'LOSS'), CTIME - OTIME))
 } # FINISH
 
 tickets.period <- function(tickets.edited) {
@@ -203,22 +204,24 @@ tickets.statistics.continuous <- function(tickets.edited) {
 } # FINISH
 
 #### PRICE DATA ####
-price.data <- function(tickets.edited, tickets.period, get.ohlc.fun=DB.OHLC, timeframe='H1', parallel=PARALLEL.THRESHOLD.DB.SYMBOLS) {
+price.data <- function(tickets.edited, tickets.period, get.ohlc.fun=DB.OHLC, timeframe='H1',
+                       mysql.setting=MYSQL.SETTING, parallel=PARALLEL.THRESHOLD.DB.SYMBOLS) {
   symbols <-
     tickets.edited[, SYMBOL] %>%
     unique
   time.period <- tickets.period$NATURE.INTERVAL
-  get.ohlc.fun(symbols, int_start(time.period), int_end(time.period), timeframe, parallel)
+  get.ohlc.fun(symbols, int_start(time.period), int_end(time.period), timeframe, mysql.setting, parallel)
 }
 
 price.data.with.tickvalue <- function(price.data,
                                       get.open.fun=DB.O, tickvalue.timeframe='M1', currency=DEFAULT.CURRENCY,
-                                      symbols.setting=SYMBOLS.SETTING) {
+                                      mysql.setting=MYSQL.SETTING, symbols.setting=SYMBOLS.SETTING) {
+  price.data %<>% copy
   serie.columns <- c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING')
   symbols <- names(price.data)
   lapply(symbols, function(symbol) {
     price.data[[symbol]] %>%
-      extract(j = tick.value := cal.tick.value(symbol, time, get.open.fun, tickvalue.timeframe,
+      extract(j = tick.value := cal.tick.value(symbol, time, get.open.fun, mysql.setting, tickvalue.timeframe,
                                                currency, symbols.setting)) %>%
       extract(j = (serie.columns) := 0)
   }) %>%
@@ -290,25 +293,33 @@ timeseries.symbols <- function(timeserie.tickets, money.tickets) {
   setNames(env.symbols.series, names(timeserie.tickets))
 } # FINISH
 
-timeseries.account <- function(timeseries.symbols) {
+timeseries.account <- function(timeseries.symbols, money.tickets) {
   len <- length(timeseries.symbols)
   if (len == 1) {
     return(timeseries.symbols[[1]])
   }
   account.table <- 0
-  intersection.time <- (timeseries.symbols[[1]])[, time]
-  len <- length(timeseries.symbols)
-  if (len > 1) {
-    lapply(timeseries.symbols[2:len], function(symbol.serie) {
-      intersection.time <<- intersection(intersection, symbol.serie[, time])
-    })
-  }
+  intersection.time <-
+    lapply(timeseries.symbols, function(ts) {
+      ts[, time]
+    }) %>%
+    do.call(c, .) %>%
+    table %>%
+    extract(. == len) %>%
+    names %>%
+    as.numeric %>%
+    sort
   lapply(timeseries.symbols, function(symbol.serie) {
     account.table <<- account.table +
-      symbol.serie[.(intersection.time), c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME')]
+      symbol.serie[.(intersection.time), c('BALANCE.DELTA', 'NET.VOLUME', 'SUM.VOLUME')]
   })
   account.table %>%
-    extract(j = time := intersection.time) %>%
+    extract(j = c('time', 'MONEY', 'EQUITY', 'RETURN') := {
+      money.delta <- money.delta(money.tickets, intersection.time)
+      equity <- BALANCE.DELTA + cumsum(money.delta)
+      returns <- c(0, diff(BALANCE.DELTA) / equity[-length(equity)])
+      list(intersection.time, money.delta, equity, returns)
+    }) %>%
     setkey(time)
 } # FINISH
 
@@ -371,8 +382,7 @@ tickets.money <- function(tickets.supported, set.init.money=NULL, include.middle
         ) %>%
           build.tickets('MONEY')
       }
-    }) %>%
-    extract2(1)
+    })
   if (include.middle) {
     return(rbind(init.part, tickets.supported[GROUP == 'MONEY' & OTIME > first.trade.time, nomatch = 0], fill = TRUE))
   }
@@ -382,7 +392,7 @@ tickets.money <- function(tickets.supported, set.init.money=NULL, include.middle
 money.delta <- function(tickets.money, time.vector) {
   serie <- vector('numeric', length(time.vector))
   mapply(function(time, value) {
-    serie[which(serie > value)[1]] <<- value
+    serie[which(time.vector > time)[1]] <<- value
   }, tickets.money[, 'OTIME'], tickets.money[, 'PROFIT'])
   serie
 }
