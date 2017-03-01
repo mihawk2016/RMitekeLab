@@ -320,7 +320,8 @@ timeseries.account <- function(timeseries.symbols, money.tickets, margin.base=15
     do.call(rbind, .) %>%
     extract(
       j = TIME := time.numeric.to.posixct(TIME)
-    )
+    ) %>%
+    rbind(account.table[, .(TIME, SYMBOL = 'PORTFOLIO', BALANCE.DELTA, NET.VOLUME)])
   account.table %>%
     extract(j = c('TIME', 'MONEY', 'EQUITY', 'RETURN', 'MARGIN.USED', 'MARGIN.FREE') := {
       money.delta <- money.delta(money.tickets, intersection.time)
