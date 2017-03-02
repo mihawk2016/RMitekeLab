@@ -45,6 +45,7 @@ report.PHASE3 <- function(report.phase2,
     PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, mysql.setting, parallel)# %T>% print
     TIMESERIE.TICKETS <- timeseries.tickets(TICKETS.EDITED, PRICE %>% price.data.with.tickvalue(
       get.open.fun, timeframe.tickvalue, currency, mysql.setting, symbols.setting), symbols.setting)# %T>% print
+    # print(TICKETS.EDITED)
     TIMESERIE.SYMBOLS <- timeseries.symbols(TIMESERIE.TICKETS, TICKETS.MONEY)# %T>% print
     .timeserie.account <- timeseries.account(TIMESERIE.SYMBOLS, TICKETS.MONEY, margin.base)# %T>% print
     TIMESERIE.ACCOUNT <- .timeserie.account$timeseries.symbols# %T>% print
@@ -81,8 +82,8 @@ tickets.edited <- function(tickets.editing, currency=DEFAULT.CURRENCY, get.open.
       profit <- cal.profit(VOLUME, tickvalue, pip)
       list(pip, profit, COMMISSION + TAXES + SWAP + PROFIT)
     }, by = SYMBOL) %>%
-    extract(j = c('LOT.PROFIT', 'RESULT', 'PERIOD') :=
-              list(PROFIT / VOLUME, ifelse(NPROFIT >= 0, 'PROFIT', 'LOSS'), CTIME - OTIME))
+    extract(j = c('LOT.PROFIT', 'RESULT') :=
+              list(PROFIT / VOLUME, ifelse(NPROFIT >= 0, 'PROFIT', 'LOSS')))
 } # FINISH
 
 tickets.period <- function(tickets.edited) {
@@ -245,9 +246,6 @@ timeseries <- function(tickets.edited, price.data.for.timeseries, symbols.settin
   )
 } # FINISH
 
-# serie = serie.table,
-# extra.columns = data.table(PERIOD = period, MFP = mfp, MFPP = mfpp, MFL = mfl, MFLP = mflp)
-
 timeseries.tickets <- function(tickets.edited, price.data, symbols.setting=SYMBOLS.SETTING) {
   fun.env <- environment()
   env.tickets.series <- list()
@@ -275,40 +273,14 @@ timeseries.tickets <- function(tickets.edited, price.data, symbols.setting=SYMBO
       by = SYMBOL
     ) %>%
     setkey(TICKET)
-  tickets.edited %<>%
+  tickets.edited %>%
     setkey(TICKET) %>%
     extract(
-      j = (colnames())
+      j = c('PERIOD', 'MFP', 'MFPP', 'MFL', 'MFLP', 'OTIME', 'CTIME') := 
+        with(extra.columns, list(PERIOD, MFP, MFPP, MFL, MFLP, time.numeric.to.posixct(OTIME), time.numeric.to.posixct(CTIME)))
     )
-  tickets.edited[, colnames()]
-  setNames(env.tickets.series, symbols)
+  setNames(env.tickets.series, tickets.edited[, SYMBOL] %>% table %>% names)
 } # FINISH
-
-# timeseries.tickets <- function(tickets.edited, price.data, symbols.setting=SYMBOLS.SETTING) {
-#   fun.env <- environment()
-#   env.tickets.series <- list()
-#   symbols <-
-#     tickets.edited %>%
-#     setkey(SYMBOL) %>%
-#     extract(
-#       j = {
-#         symbol <- SYMBOL[1]
-#         ticket.timeserie <-
-#           mapply(timeseries.one.ticket, OTIME, CTIME, NPROFIT, TYPE, VOLUME, OPRICE,
-#                  MoreArgs = list(symbols.setting[symbol, DIGITS], symbols.setting[symbol, SPREAD],
-#                                  price.data[[symbol]], attr(price.data, 'interval')),
-#                  SIMPLIFY = FALSE) %>%
-#           set_names(paste('T', TICKET, sep = '_')) %>%
-#           list %>%
-#           append(env.tickets.series, .) %>%
-#           assign('env.tickets.series', ., envir = fun.env)
-#         NA
-#       },
-#       by = SYMBOL
-#     ) %>%
-#     extract(j = SYMBOL)
-#   setNames(env.tickets.series, symbols)
-# } # FINISH
 
 timeseries.symbols <- function(timeserie.tickets, money.tickets) {
   fun.env <- environment()
@@ -360,10 +332,10 @@ timeseries.account <- function(timeseries.symbols, money.tickets, margin.base=15
   }, timeseries.symbols, symbol.names)
   symbols.profit_volume %<>%
     do.call(rbind, .) %>%
+    rbind(account.table[, .(TIME = intersection.time, SYMBOL = 'PORTFOLIO', BALANCE.DELTA, NET.VOLUME)])%>%
     extract(
       j = TIME := time.numeric.to.posixct(TIME)
-    ) %>%
-    rbind(account.table[, .(TIME, SYMBOL = 'PORTFOLIO', BALANCE.DELTA, NET.VOLUME)])
+    ) 
   account.table %>%
     extract(j = c('TIME', 'MONEY', 'EQUITY', 'RETURN', 'MARGIN.USED', 'MARGIN.FREE') := {
       money.delta <- money.delta(money.tickets, intersection.time)

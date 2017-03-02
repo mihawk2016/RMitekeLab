@@ -221,7 +221,7 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
         pips <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
         tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, mysql.setting, timeframe, currency, symbols.setting)
         new.profit <- cal.profit(VOLUME, tickvalue, pips)
-        list(PROFIT - new.profit, new.profit)
+        list(round(PROFIT - new.profit, 2), new.profit)
       }]
     }
     build.tickets(closed.tickets, 'CLOSED')
