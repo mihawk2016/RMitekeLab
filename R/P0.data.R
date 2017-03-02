@@ -2,6 +2,8 @@ library(compiler)
 compilePKGS(T)
 
 #### @UPDATE IDEA@ ####
+## 2017-03-02: try posixct time in table; add symbol - calendars for shiny; Sys.setlocale() for whole report
+##             use more environment for timeseries; max floating profit time & tickets period need to minus weekend time
 ## 2017-02-20: mysql.price.open add parallel method
 
 #### @PATCH NOTE@ ####

@@ -212,12 +212,14 @@ price.data <- function(tickets.edited, tickets.period, get.ohlc.fun=DB.OHLC, tim
     tickets.edited[, SYMBOL] %>%
     unique
   time.period <- tickets.period$NATURE.INTERVAL
-  get.ohlc.fun(symbols, int_start(time.period), int_end(time.period), timeframe, mysql.setting, parallel)
+  get.ohlc.fun(symbols, int_start(time.period), int_end(time.period), timeframe, mysql.setting, parallel) %>%
+    setattr('interval', TIMEFRAME.INTERVAL[timeframe])
 }
 
 price.data.with.tickvalue <- function(price.data,
                                       get.open.fun=DB.O, tickvalue.timeframe='M1', currency=DEFAULT.CURRENCY,
                                       mysql.setting=MYSQL.SETTING, symbols.setting=SYMBOLS.SETTING) {
+  interval <- attr(price.data, 'interval')
   price.data %<>% copy
   serie.columns <- c('PROFIT', 'FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING')
   symbols <- names(price.data)
@@ -227,7 +229,8 @@ price.data.with.tickvalue <- function(price.data,
                                                currency, symbols.setting)) %>%
       extract(j = (serie.columns) := 0)
   }) %>%
-    set_names(symbols)
+    set_names(symbols) %>%
+    setattr('interval', interval)
 }
 
 #### TIMESERIES ####
@@ -242,10 +245,13 @@ timeseries <- function(tickets.edited, price.data.for.timeseries, symbols.settin
   )
 } # FINISH
 
+# serie = serie.table,
+# extra.columns = data.table(PERIOD = period, MFP = mfp, MFPP = mfpp, MFL = mfl, MFLP = mflp)
+
 timeseries.tickets <- function(tickets.edited, price.data, symbols.setting=SYMBOLS.SETTING) {
   fun.env <- environment()
   env.tickets.series <- list()
-  symbols <-
+  extra.columns <-
     tickets.edited %>%
     setkey(SYMBOL) %>%
     extract(
@@ -256,17 +262,53 @@ timeseries.tickets <- function(tickets.edited, price.data, symbols.setting=SYMBO
                  MoreArgs = list(symbols.setting[symbol, DIGITS], symbols.setting[symbol, SPREAD],
                                  price.data[[symbol]]),
                  SIMPLIFY = FALSE) %>%
-          set_names(paste('T', TICKET, sep = '_')) %>%
+          set_names(paste('T', TICKET, sep = '_'))
+        ticket.timeserie %>%
           list %>%
           append(env.tickets.series, .) %>%
           assign('env.tickets.series', ., envir = fun.env)
-        NA
+        do.call(rbind,
+                mapply(tickets.extra.columns, ticket.timeserie, TICKET, OTIME, CTIME,
+                       MoreArgs = list(attr(price.data, 'interval')),
+                       SIMPLIFY = FALSE))
       },
       by = SYMBOL
     ) %>%
-    extract(j = SYMBOL)
+    setkey(TICKET)
+  tickets.edited %<>%
+    setkey(TICKET) %>%
+    extract(
+      j = (colnames())
+    )
+  tickets.edited[, colnames()]
   setNames(env.tickets.series, symbols)
 } # FINISH
+
+# timeseries.tickets <- function(tickets.edited, price.data, symbols.setting=SYMBOLS.SETTING) {
+#   fun.env <- environment()
+#   env.tickets.series <- list()
+#   symbols <-
+#     tickets.edited %>%
+#     setkey(SYMBOL) %>%
+#     extract(
+#       j = {
+#         symbol <- SYMBOL[1]
+#         ticket.timeserie <-
+#           mapply(timeseries.one.ticket, OTIME, CTIME, NPROFIT, TYPE, VOLUME, OPRICE,
+#                  MoreArgs = list(symbols.setting[symbol, DIGITS], symbols.setting[symbol, SPREAD],
+#                                  price.data[[symbol]], attr(price.data, 'interval')),
+#                  SIMPLIFY = FALSE) %>%
+#           set_names(paste('T', TICKET, sep = '_')) %>%
+#           list %>%
+#           append(env.tickets.series, .) %>%
+#           assign('env.tickets.series', ., envir = fun.env)
+#         NA
+#       },
+#       by = SYMBOL
+#     ) %>%
+#     extract(j = SYMBOL)
+#   setNames(env.tickets.series, symbols)
+# } # FINISH
 
 timeseries.symbols <- function(timeserie.tickets, money.tickets) {
   fun.env <- environment()
@@ -340,35 +382,55 @@ timeseries.account <- function(timeseries.symbols, money.tickets, margin.base=15
 } # FINISH
 
 timeseries.one.ticket <- function(otime, ctime, nprofit, type, volume,
-                                     oprice, digit, spread, symbol.price.data) {
+                                  oprice, digit, spread, symbol.price.data, interval) {
   copy(symbol.price.data) %>%
-    setkey(TIME) %>%
-    extract(TIME >= ctime, PROFIT := nprofit) %>%
-    extract(
-      i = TIME >= otime & TIME < ctime,
-      j = c('FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING') := {
-        digit.factor <- 10 ^ digit
-        if (type == 'BUY') {
-          pl.volume <- volume
-          floating.pip <- (OPEN - oprice) * digit.factor
-          max.floating.pip <- (HIGH - oprice) * digit.factor
-          min.floating.pip <- (LOW - oprice) * digit.factor
-        } else {
-          pl.volume <- -volume
-          floating.pip <- (oprice - OPEN) * digit.factor - spread
-          max.floating.pip <- (oprice - LOW) * digit.factor - spread
-          min.floating.pip <- (oprice - HIGH) * digit.factor - spread
-        }
-        list(cal.profit(volume, TICKVALUE, floating.pip), pl.volume, volume,
-             cal.profit(volume, TICKVALUE, max.floating.pip),
-             cal.profit(volume, TICKVALUE, min.floating.pip))
+  setkey(TIME) %>%
+  extract(TIME >= ctime, PROFIT := nprofit) %>%
+  extract(
+    i = TIME >= otime & TIME < ctime,
+    j = c('FLOATING', 'PL.VOLUME', 'VOLUME', 'MAX.FLOATING', 'MIN.FLOATING') := {
+      digit.factor <- 10 ^ digit
+      if (type == 'BUY') {
+        pl.volume <- volume
+        floating.pip <- (OPEN - oprice) * digit.factor
+        max.floating.pip <- (HIGH - oprice) * digit.factor
+        min.floating.pip <- (LOW - oprice) * digit.factor
+      } else {
+        pl.volume <- -volume
+        floating.pip <- (oprice - OPEN) * digit.factor - spread
+        max.floating.pip <- (oprice - LOW) * digit.factor - spread
+        min.floating.pip <- (oprice - HIGH) * digit.factor - spread
       }
-    ) %>%
-    extract(
-      j = c('OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVALUE') := NULL
-    ) %>%
-    setkey(TIME)
+      list(cal.profit(volume, TICKVALUE, floating.pip), pl.volume, volume,
+           cal.profit(volume, TICKVALUE, max.floating.pip),
+           cal.profit(volume, TICKVALUE, min.floating.pip))
+    }
+  ) %>%
+  extract(
+    j = c('OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVALUE') := NULL
+  ) %>%
+  setkey(TIME)
 } # FINISH
+
+tickets.extra.columns <- function(timeseries.one.ticket, ticket, otime, ctime, interval) {
+  floating.part <- timeseries.one.ticket[VOLUME != 0, nomatch = 0]
+  otime.shift <- interval - otime %% interval
+  ctime.shift <- ctime %% interval
+  if (rows <- nrow(floating.part)) {
+    period <- otime.shift + ctime.shift + rows * interval
+    mfp <- floating.part[, max(MAX.FLOATING)]
+    mfl <- floating.part[, min(MIN.FLOATING)]
+    mfpp <- otime.shift + (floating.part[1:which.max(MAX.FLOATING), .N] - 0.5) * interval
+    mflp <- otime.shift + (floating.part[1:which.min(MIN.FLOATING), .N] - 0.5) * interval
+  } else {
+    period <- min(otime.shift + ctime.shift, ctime - otime)
+    mfp <- NA_real_
+    mfl <- NA_real_
+    mfpp <- NA_integer_
+    mflp <- NA_integer_
+  }
+  data.table(TICKET = ticket, PERIOD = period, MFP = mfp, MFPP = mfpp, MFL = mfl, MFLP = mflp)
+}
 
 #### MONEY ####
 tickets.money <- function(tickets.supported, set.init.money=NULL, include.middle=TRUE, default.money=DEFAULT.INIT.MONEY) {
@@ -446,7 +508,16 @@ maxdrawdown <- function(x) {
   to <- which(mdd == cum.drawdown)
   cum.max <- which(cum.drawdown  == 0)
   from <- sapply(to, function(x) {
-    cum.drawdown[sum(cum.drawdown < to)]
+    cum.max[sum(cum.max < to)]
   })
   list(MDD = mdd, FROM = from, TO = to)
 } # FINISH
+
+cum.return <- function(x, percent=T, digits=2) {
+  x[is.na(x)] <- 0
+  res <- cumprod(x + 1) - 1
+  if (percent) {
+    res %<>% multiply_by(100)
+  }
+  round(res, digits)
+}
