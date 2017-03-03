@@ -7,7 +7,7 @@ compilePKGS(T)
 #### @PATCH NOTE@ ####
 ## 2017-02-17: Version 0.1
 
-## additional tickets column: PIP, NPROFIT, RESULT, LOT.PROFIT
+## additional tickets column: PIP, NPROFIT, PL, LOT.PROFIT
 reports.PHASE3 <- function(report.phase2,
                            set.init.money=NULL, include.middle=TRUE, default.money=DEFAULT.INIT.MONEY,
                            currency=DEFAULT.CURRENCY, get.open.fun=DB.O, timeframe.tickvalue='M1',
@@ -39,7 +39,7 @@ report.PHASE3 <- function(report.phase2,
                           get.ohlc.fun=DB.OHLC, timeframe.report='H1', parallel=PARALLEL.THRESHOLD.DB.SYMBOLS,
                           margin.base=1500, symbols.setting=SYMBOLS.SETTING, mysql.setting=MYSQL.SETTING) {
   within(report.phase2, {
-    TICKETS.EDITED <- tickets.edited(TICKETS.EDITING, CURRENCY, get.open.fun, timeframe.tickvalue, symbols.setting)
+    TICKETS.EDITED <- tickets.edited(TICKETS.EDITING, CURRENCY, get.open.fun, timeframe.tickvalue, symbols.setting, mysql.setting)
     TICKETS.MONEY <- tickets.money(TICKETS.SUPPORTED, set.init.money, include.middle, default.money)# %T>% print
     PERIOD <- tickets.period(TICKETS.EDITED)# %T>% print
     PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, mysql.setting, parallel)# %T>% print
@@ -50,6 +50,16 @@ report.PHASE3 <- function(report.phase2,
     .timeserie.account <- timeseries.account(TIMESERIE.SYMBOLS, TICKETS.MONEY, margin.base)# %T>% print
     TIMESERIE.ACCOUNT <- .timeserie.account$timeseries.symbols# %T>% print
     SYMBOLS.PROFIT_VOLUME <- .timeserie.account$symbols.profit_volume
+    STATISTIC.ACCOUNT.PL <-
+      tickets.statistics.by.pl(TICKETS.EDITED) %>%
+      setkey(PL) %>%
+      extract(tickets.statistics.continuous(TICKETS.EDITED))# %T>% print
+    if (length(unique(TICKETS.EDITED[, SYMBOL])) > 1) {
+      STATISTIC.SYMBOLS.PL <- TICKETS.EDITED[, tickets.statistics.by.pl(copy(.SD)), by = SYMBOL] %>%
+        setkey(SYMBOL, PL) %>%
+        extract(TICKETS.EDITED[, tickets.statistics.continuous(copy(.SD)), by = SYMBOL]) %T>% print
+    }
+    
     .timeserie.account <- NULL
     PHASE <- 3
   })
@@ -80,9 +90,9 @@ tickets.edited <- function(tickets.editing, currency=DEFAULT.CURRENCY, get.open.
       pip <- cal.pips(TYPE, OPRICE, CPRICE, symbols.setting[symbol, DIGITS])
       tickvalue <- cal.tick.value(symbol, CTIME, get.open.fun, mysql.setting, timeframe, currency, symbols.setting)
       profit <- cal.profit(VOLUME, tickvalue, pip)
-      list(pip, profit, COMMISSION + TAXES + SWAP + PROFIT)
+      list(round(pip, 0), profit, COMMISSION + TAXES + SWAP + PROFIT)
     }, by = SYMBOL) %>%
-    extract(j = c('LOT.PROFIT', 'RESULT') :=
+    extract(j = c('LOT.PROFIT', 'PL') :=
               list(PROFIT / VOLUME, ifelse(NPROFIT >= 0, 'PROFIT', 'LOSS')))
 } # FINISH
 
@@ -109,19 +119,19 @@ tickets.period <- function(tickets.edited) {
 } # FINISH
 
 #### STATISTICS ####
-tickets.statistics <- function(tickets.edited) {
-  within(list(), {
-    STATISTIC.RESULT <- tickets.statistics.by.result(tickets.edited)
-    STATISTIC.EXIT <- tickets.statistics.by.exit(tickets.edited)
-    STATISTIC.TYPE <- tickets.statistics.by.type(tickets.edited)
-    STATISTIC.SUMMARY <- tickets.statistics.by.result(STATISTIC.RESULT)
-    STATISTIC.CONTINUOUS <- tickets.statistics.continuous(tickets.edited)
-  })
-}
+# tickets.statistics <- function(tickets.edited) {
+#   within(list(), {
+#     STATISTIC.PL <- tickets.statistics.by.pl(tickets.edited)
+#     STATISTIC.EXIT <- tickets.statistics.by.exit(tickets.edited)
+#     STATISTIC.TYPE <- tickets.statistics.by.type(tickets.edited)
+#     STATISTIC.SUMMARY <- tickets.statistics.by.pl(STATISTIC.PL)
+#     STATISTIC.CONTINUOUS <- tickets.statistics.continuous(tickets.edited)
+#   })
+# }
 
-tickets.statistics.by.result <- function(tickets.edited) {
+tickets.statistics.by.pl <- function(tickets.edited) {
   tickets.edited %>%
-    setkey(RESULT) %>%
+    setkey(PL) %>%
     extract(
       j = .(N = .N,
             SUM = sum(NPROFIT),
@@ -132,10 +142,9 @@ tickets.statistics.by.result <- function(tickets.edited) {
             PIP.MAX = ifelse(sign(PIP[1]) == -1, min(PIP), max(PIP)),
             VOL.SUM = sum(VOLUME),
             VOL.MEAN = round(mean(VOLUME), 2),
-            VOL.MAX = ifelse(sign(VOLUME[1]) == -1, min(VOLUME), max(VOLUME)),
-            VOL.MIN = ifelse(sign(VOLUME[1]) == -1, max(VOLUME), min(VOLUME))
-    ),
-    by = RESULT) %>%
+            VOL.MAX = max(VOLUME),
+            VOL.MIN = min(VOLUME)),
+      by = PL) %>%
     extract(c('PROFIT', 'LOSS')) %>%
     extract(is.na(N), 2:ncol(.) := list(0))
 } # FINISH
@@ -164,17 +173,18 @@ tickets.statistics.by.type <- function(tickets.edited) {
     extract(is.na(N), 2:ncol(.) := list(0))
 } # FINISH
 
-tickets.statistics.summary <- function(statistics.result) {
-  statistics.result[j = .('N.TRADE' = sum(N),
-                          'NET.PROFIT' = sum(SUM),
-                          'NET.PIP' = sum(PIP.SUM),
-                          'SUM.VOLUME' = sum(VOL.SUM),
-                          'WIN%' = round(N[1] / sum(N) * 100, 2),
-                          'PROFIT.FACTOR' = round(SUM[1] / -SUM[2], 2),
-                          'EXPECT' = round(sum(SUM) / sum(N), 2),
-                          'VOL/TRADE' = round(sum(VOL.SUM) / sum(N), 2),
-                          'PROFIT/TRADE' = round(sum(SUM) / sum(VOL.SUM), 2)
-                          )]
+tickets.statistics.summary <- function(statistics.pl, trade.day) {
+  statistics.pl[j = .('N.TRADE' = sum(N),
+                      'NET.PROFIT' = sum(SUM),
+                      'NET.PIP' = sum(PIP.SUM),
+                      'SUM.VOLUME' = sum(VOL.SUM),
+                      'WIN%' = round(N[1] / sum(N) * 100, 2),
+                      'PROFIT.FACTOR' = round(SUM[1] / -SUM[2], 2),
+                      'EXPECT' = round(sum(SUM) / sum(N), 2),
+                      'VOL/TRADE' = round(sum(VOL.SUM) / sum(N), 2),
+                      'PROFIT/TRADE' = round(sum(SUM) / sum(VOL.SUM), 2),
+                      'TRADE/DAY' = round(sum(N) / trade.day, 2)
+  )]
 } # FINISH
 
 tickets.statistics.continuous <- function(tickets.edited) {
@@ -185,23 +195,23 @@ tickets.statistics.continuous <- function(tickets.edited) {
   col.name <- c('CON.N.MAX', 'CON.N.MEAN', 'CON.MAX', 'CON.MEAN')
   row.name <- c('PROFIT', 'LOSS')
   con.table <-
-    data.table(RESULT = row.name, matrix(data = NA_real_, nrow = length(row.name), ncol = length(col.name),
+    data.table(PL = row.name, matrix(data = 0, nrow = length(row.name), ncol = length(col.name),
                                          dimnames = list(NULL, col.name))) %>%
-    setkey(RESULT)
+    setkey(PL)
   continuous <- cal.continuous(nprofit)
   if (length(continuous$UP.FROM)) {
     up.n <- with(continuous, UP.TO - UP.FROM) + 1
     up.pl <- mapply(function(from, to) {
       sum(nprofit[from:to])
     }, from = continuous$UP.FROM, to = continuous$UP.TO)
-    con.table['PROFIT', (col.name) := list(max(up.n), mean(up.n), max(up.pl), mean(up.pl))]
+    con.table['PROFIT', (col.name) := list(max(up.n), round(mean(up.n), 2), max(up.pl), round(mean(up.pl)), 2)]
   }
   if (length(continuous$DN.FROM)) {
     dn.n <- with(continuous, DN.TO - DN.FROM) + 1
     dn.pl <- mapply(function(from, to) {
       sum(nprofit[from:to])
     }, from = continuous$DN.FROM, to = continuous$DN.TO)
-    con.table['LOSS', (col.name) := list(max(dn.n), mean(dn.n), max(dn.pl), mean(dn.pl))]
+    con.table['LOSS', (col.name) := list(max(dn.n), round(mean(dn.n), 2), max(dn.pl), round(mean(dn.pl), 2))]
   }
   con.table[row.name]
 } # FINISH
@@ -392,7 +402,7 @@ tickets.extra.columns <- function(timeseries.one.ticket, ticket, otime, ctime, i
   if (rows <- nrow(floating.part)) {
     period <- otime.shift + ctime.shift + rows * interval
     mfp <- floating.part[, max(MAX.FLOATING)]
-    mfl <- floating.part[, min(MIN.FLOATING)]
+    mfl <- floating.part[, min(MIN.FLOATING)] %>% ifelse(. > 0, 0, .)
     mfpp <- otime.shift + (floating.part[1:which.max(MAX.FLOATING), .N] - 0.5) * interval
     mflp <- otime.shift + (floating.part[1:which.min(MIN.FLOATING), .N] - 0.5) * interval
   } else {
@@ -493,4 +503,10 @@ cum.return <- function(x, percent=T, digits=2) {
     res %<>% multiply_by(100)
   }
   round(res, digits)
+}
+
+time.num.to.period.char <- function(time.num) {
+  time.numeric.to.posixct(time.num) %>%
+    as.character %>%
+    substr(12, 20) %>% ifelse(time.num >= 86400, paste0(time.num %/% 86400, 'D ', .), .)
 }
