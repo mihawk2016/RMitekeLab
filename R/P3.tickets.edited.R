@@ -50,14 +50,15 @@ report.PHASE3 <- function(report.phase2,
     .timeserie.account <- timeseries.account(TIMESERIE.SYMBOLS, TICKETS.MONEY, margin.base)# %T>% print
     TIMESERIE.ACCOUNT <- .timeserie.account$timeseries.symbols# %T>% print
     SYMBOLS.PROFIT_VOLUME <- .timeserie.account$symbols.profit_volume
-    STATISTIC.ACCOUNT.PL <-
-      tickets.statistics.by.pl(TICKETS.EDITED) %>%
-      setkey(PL) %>%
-      extract(tickets.statistics.continuous(TICKETS.EDITED))# %T>% print
+    STATISTIC.ACCOUNT.PL <- tickets.statistics.pl.table(TICKETS.EDITED)# %T>% print
     if (length(unique(TICKETS.EDITED[, SYMBOL])) > 1) {
-      STATISTIC.SYMBOLS.PL <- TICKETS.EDITED[, tickets.statistics.by.pl(copy(.SD)), by = SYMBOL] %>%
+      STATISTIC.SYMBOLS.PL <-
+        TICKETS.EDITED %>%
         setkey(SYMBOL, PL) %>%
-        extract(TICKETS.EDITED[, tickets.statistics.continuous(copy(.SD)), by = SYMBOL]) %T>% print
+        extract(
+          j = tickets.statistics.pl.table(copy(.SD)),
+          by = SYMBOL
+        ) %T>% print
     }
     
     .timeserie.account <- NULL
@@ -128,6 +129,22 @@ tickets.period <- function(tickets.edited) {
 #     STATISTIC.CONTINUOUS <- tickets.statistics.continuous(tickets.edited)
 #   })
 # }
+
+tickets.statistics.pl.table <- function(tickets.edited) {
+  tickets.statistics.by.pl(tickets.edited) %>%
+    setkey(PL) %>%
+    # extract(tickets.statistics.continuous(tickets.edited))
+    extract(tickets.statistics.continuous(tickets.edited)) %>%
+    rbind(.[, .(PL = 'TOTAL',
+                N = sum(N),
+                SUM = round(sum(SUM), 2),
+                MEAN = round(sum(SUM) / sum(N), 2),
+                PIP.SUM = round(sum(PIP.SUM), 2),
+                PIP.MEAN = round(sum(PIP.SUM) / sum(N), 2),
+                VOL.SUM = round(sum(VOL.SUM), 2),
+                VOL.MEAN = round(sum(VOL.SUM) / sum(N), 2))],
+          use.names = TRUE, fill = TRUE)
+}
 
 tickets.statistics.by.pl <- function(tickets.edited) {
   tickets.edited %>%
@@ -204,14 +221,14 @@ tickets.statistics.continuous <- function(tickets.edited) {
     up.pl <- mapply(function(from, to) {
       sum(nprofit[from:to])
     }, from = continuous$UP.FROM, to = continuous$UP.TO)
-    con.table['PROFIT', (col.name) := list(max(up.n), round(mean(up.n), 2), max(up.pl), round(mean(up.pl)), 2)]
+    con.table['PROFIT', (col.name) := list(max(up.n), round(mean(up.n), 2), round(max(up.pl), 2), round(mean(up.pl)), 2)]
   }
   if (length(continuous$DN.FROM)) {
     dn.n <- with(continuous, DN.TO - DN.FROM) + 1
     dn.pl <- mapply(function(from, to) {
       sum(nprofit[from:to])
     }, from = continuous$DN.FROM, to = continuous$DN.TO)
-    con.table['LOSS', (col.name) := list(max(dn.n), round(mean(dn.n), 2), max(dn.pl), round(mean(dn.pl), 2))]
+    con.table['LOSS', (col.name) := list(max(dn.n), round(mean(dn.n), 2), round(max(dn.pl), 2), round(mean(dn.pl), 2))]
   }
   con.table[row.name]
 } # FINISH
