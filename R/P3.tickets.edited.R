@@ -45,20 +45,30 @@ report.PHASE3 <- function(report.phase2,
     PRICE <- price.data(TICKETS.EDITED, PERIOD, get.ohlc.fun, timeframe.report, mysql.setting, parallel)# %T>% print
     TIMESERIE.TICKETS <- timeseries.tickets(TICKETS.EDITED, PRICE %>% price.data.with.tickvalue(
       get.open.fun, timeframe.tickvalue, currency, mysql.setting, symbols.setting), symbols.setting)# %T>% print
-    # print(TICKETS.EDITED)
     TIMESERIE.SYMBOLS <- timeseries.symbols(TIMESERIE.TICKETS, TICKETS.MONEY)# %T>% print
     .timeserie.account <- timeseries.account(TIMESERIE.SYMBOLS, TICKETS.MONEY, margin.base)# %T>% print
     TIMESERIE.ACCOUNT <- .timeserie.account$timeseries.symbols# %T>% print
     SYMBOLS.PROFIT_VOLUME <- .timeserie.account$symbols.profit_volume
     STATISTIC.ACCOUNT.PL <- tickets.statistics.pl.table(TICKETS.EDITED)# %T>% print
+    STATISTIC.ACCOUNT.OTHERS <- tickets.statistics.others.table(TICKETS.EDITED, TIMESERIE.ACCOUNT, PERIOD$TRADE.DAYS, attr(PRICE, 'interval'))# %T>% print
     if (length(unique(TICKETS.EDITED[, SYMBOL])) > 1) {
+      trade.days <- PERIOD$TRADE.DAYS
       STATISTIC.SYMBOLS.PL <-
         TICKETS.EDITED %>%
         setkey(SYMBOL, PL) %>%
         extract(
           j = tickets.statistics.pl.table(copy(.SD)),
           by = SYMBOL
-        ) %T>% print
+        )# %T>% print
+      STATISTIC.SYMBOLS.OTHERS <-
+        TICKETS.EDITED %>%
+        setkey(SYMBOL, PL) %>%
+        extract(
+          j = {
+            tickets.statistics.others.table(copy(.SD), TIMESERIE.SYMBOLS[[SYMBOL[1]]], trade.days, attr(PRICE, 'interval'))# %T>% print
+          },
+          by = SYMBOL
+        )# %T>% print
     }
     
     .timeserie.account <- NULL
@@ -166,17 +176,54 @@ tickets.statistics.by.pl <- function(tickets.edited) {
     extract(is.na(N), 2:ncol(.) := list(0))
 } # FINISH
 
+tickets.statistics.others.table <- function(tickets.edited, timeseries, trade.day, interval) {
+  mdd.mdd <- maxdrawdown(timeseries[, BALANCE.DELTA])
+  returns <- timeseries[, RETURN]
+  returns[is.na(returns)] <- 0
+  return.serie <- cumprod(returns + 1)
+  mddp.mdd <- maxdrawdown(return.serie)
+  tickets.statistics.profit_yield_trade(tickets.edited, tail(cum.return(timeseries[, RETURN]), 1), trade.day) %>%
+    cbind(., tickets.statistics.by.exit(tickets.edited),
+          SUMMARY = c('SHARPE', 'PROF.FACTOR', 'LOT.PROF'),
+          S.VALUE = c(round(sharpe.ratio(timeseries[, RETURN]), 2),
+                    round(tickets.edited[PL == 'PROFIT', sum(NPROFIT), nomatch = 0] / -tickets.edited[PL == 'LOSS', sum(NPROFIT), nomatch = 0], 2),
+                    round(tickets.edited[, sum(NPROFIT) / sum(VOLUME)], 2)),
+          MDD = c('MDD', 'MDDP', NA_character_),
+          MDD.VALUE = c(mdd.mdd$MDD %>% round(2),
+                        (1 - return.serie[mddp.mdd$TO[1]] / return.serie[mddp.mdd$FROM[1]]) %>% multiply_by(100) %>% round(2),
+                        NA_real_),
+          MDD.PERIOD = c((mdd.mdd$TO[1] - mdd.mdd$FROM[1]) %>% multiply_by(interval),
+                         (mddp.mdd$TO[1] - mddp.mdd$FROM[1]) %>% multiply_by(interval),
+                         NA_real_)
+    )
+}
+
 tickets.statistics.by.exit <- function(tickets.edited) {
+  n.trade <- nrow(tickets.edited)
   tickets.edited %>%
     setkey(EXIT) %>%
     extract(
       i = !is.na(EXIT),
       j = .(N = .N,
-            NPROFIT = sum(NPROFIT)),
+            PERCENT = round(.N / n.trade * 100, 2),
+            NPROFIT = round(sum(NPROFIT), 2)),
       by = EXIT) %>%
     extract(c('SL', 'TP', 'SO')) %>%
     extract(is.na(N), 2:ncol(.) := list(0))
 } # FINISH
+
+tickets.statistics.profit_yield_trade <- function(tickets.edited, yield, trade.day) {
+  data.table(
+    ITEM = c('PROFIT', 'YIELD', 'TRADE'),
+    TOTAL = c(round(sum(tickets.edited[, NPROFIT]), 2), yield, nrow(tickets.edited))
+  ) %>%
+    extract(
+      j = c('DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY') := {
+        daily <- round(TOTAL / trade.day, 2)
+        list(daily, round(daily * 5, 2), round(daily * 21.76, 2), round(daily * 252, 2))
+      }
+    )
+}
 
 tickets.statistics.by.type <- function(tickets.edited) {
   tickets.edited %>%
@@ -190,17 +237,11 @@ tickets.statistics.by.type <- function(tickets.edited) {
     extract(is.na(N), 2:ncol(.) := list(0))
 } # FINISH
 
-tickets.statistics.summary <- function(statistics.pl, trade.day) {
-  statistics.pl[j = .('N.TRADE' = sum(N),
-                      'NET.PROFIT' = sum(SUM),
-                      'NET.PIP' = sum(PIP.SUM),
-                      'SUM.VOLUME' = sum(VOL.SUM),
-                      'WIN%' = round(N[1] / sum(N) * 100, 2),
+tickets.statistics.summary <- function(statistics.pl) {
+  statistics.pl[j = .(
                       'PROFIT.FACTOR' = round(SUM[1] / -SUM[2], 2),
-                      'EXPECT' = round(sum(SUM) / sum(N), 2),
-                      'VOL/TRADE' = round(sum(VOL.SUM) / sum(N), 2),
-                      'PROFIT/TRADE' = round(sum(SUM) / sum(VOL.SUM), 2),
-                      'TRADE/DAY' = round(sum(N) / trade.day, 2)
+                      'PROFIT/LOT' = round(sum(SUM) / sum(VOL.SUM), 2)
+                     
   )]
 } # FINISH
 
@@ -508,7 +549,7 @@ maxdrawdown <- function(x) {
   to <- which(mdd == cum.drawdown)
   cum.max <- which(cum.drawdown  == 0)
   from <- sapply(to, function(x) {
-    cum.max[sum(cum.max < to)]
+    cum.max[sum(cum.max <= x)]
   })
   list(MDD = mdd, FROM = from, TO = to)
 } # FINISH
