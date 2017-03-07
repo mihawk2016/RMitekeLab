@@ -25,8 +25,8 @@ read.mq.file <- function(mq.files, parallel=PARALLEL.THRESHOLD.READ.FILES) {
   # 2017-02-07: Version 0.2 parallel
   # 2017-02-05: Version 0.1
   if (is.data.frame(mq.files)) {
-    mq.files <- mq.files$datapath
     mq.names <- mq.files$name
+    mq.files <- mq.files$datapath
   } else {
     mq.names <- basename(mq.files)
   }
@@ -109,10 +109,10 @@ fetch.html.data <- function(mq.file) {
     html.parse <- read_html(mq.file, encoding = 'UTF-16')
     infos <- fetch.html.data.infos.mt5trade(html.parse)
   } else if (grepl('Closed Trades Report', title)) {
-    html.parse <- NULL
+    html.parse <- 'NEEDLESS'
     infos <- fetch.html.data.infos.mt4m_closed()
   } else if (grepl('Raw Report', title)) {
-    html.parse <- NULL
+    html.parse <- 'NEEDLESS'
     infos <- fetch.html.data.infos.mt4m_raw()
   } else {
     return(NULL)

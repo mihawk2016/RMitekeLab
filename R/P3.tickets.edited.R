@@ -49,6 +49,7 @@ report.PHASE3 <- function(report.phase2,
     .timeserie.account <- timeseries.account(TIMESERIE.SYMBOLS, TICKETS.MONEY, margin.base)# %T>% print
     TIMESERIE.ACCOUNT <- .timeserie.account$timeseries.symbols# %T>% print
     SYMBOLS.PROFIT_VOLUME <- .timeserie.account$symbols.profit_volume
+    SYMBOLS.RETURN <- .timeserie.account$symbols.return# %T>% print
     STATISTIC.ACCOUNT.PL <- tickets.statistics.pl.table(TICKETS.EDITED)# %T>% print
     STATISTIC.ACCOUNT.OTHERS <- tickets.statistics.others.table(TICKETS.EDITED, TIMESERIE.ACCOUNT, PERIOD$TRADE.DAYS, attr(PRICE, 'interval'))# %T>% print
     if (length(unique(TICKETS.EDITED[, SYMBOL])) > 1) {
@@ -70,7 +71,6 @@ report.PHASE3 <- function(report.phase2,
           by = SYMBOL
         )# %T>% print
     }
-    
     .timeserie.account <- NULL
     PHASE <- 3
   })
@@ -163,14 +163,14 @@ tickets.statistics.by.pl <- function(tickets.edited) {
       j = .(N = .N,
             SUM = sum(NPROFIT),
             MEAN = round(mean(NPROFIT), 2),
-            MAX = ifelse(sign(NPROFIT[1]) == -1, min(NPROFIT), max(NPROFIT)),
+            MAX = round(ifelse(sign(NPROFIT[1]) == -1, min(NPROFIT), max(NPROFIT)), 2),
             PIP.SUM = sum(PIP),
             PIP.MEAN = round(mean(PIP), 2),
             PIP.MAX = ifelse(sign(PIP[1]) == -1, min(PIP), max(PIP)),
             VOL.SUM = sum(VOLUME),
             VOL.MEAN = round(mean(VOLUME), 2),
-            VOL.MAX = max(VOLUME),
-            VOL.MIN = min(VOLUME)),
+            VOL.MAX = round(max(VOLUME), 2),
+            VOL.MIN = round(min(VOLUME), 2)),
       by = PL) %>%
     extract(c('PROFIT', 'LOSS')) %>%
     extract(is.na(N), 2:ncol(.) := list(0))
@@ -333,10 +333,10 @@ timeseries.tickets <- function(tickets.edited, price.data, symbols.setting=SYMBO
           list %>%
           append(env.tickets.series, .) %>%
           assign('env.tickets.series', ., envir = fun.env)
-        do.call(rbind,
-                mapply(tickets.extra.columns, ticket.timeserie, TICKET, OTIME, CTIME,
-                       MoreArgs = list(attr(price.data, 'interval')),
-                       SIMPLIFY = FALSE))
+        mapply(tickets.extra.columns, ticket.timeserie, TICKET, OTIME, CTIME,
+               MoreArgs = list(attr(price.data, 'interval')),
+               SIMPLIFY = FALSE) %>%
+          do.call(rbind, .)
       },
       by = SYMBOL
     ) %>%
@@ -354,7 +354,6 @@ timeseries.symbols <- function(timeserie.tickets, money.tickets) {
   fun.env <- environment()
   env.symbols.series <- list()
   lapply(timeserie.tickets, function(symbol.list) {
-    
     symbol.table <- 0
     symbol.timeserie <-
       lapply(symbol.list, function(ticket.serie) {
@@ -367,8 +366,13 @@ timeseries.symbols <- function(timeserie.tickets, money.tickets) {
         money.delta <- money.delta(money.tickets, serie.time)
         equity <- BALANCE.DELTA + cumsum(money.delta)
         returns <- c(0, diff(BALANCE.DELTA) / equity[-length(equity)])
+        infinite.index <- which(is.infinite(returns))
+        returns[infinite.index] <- BALANCE.DELTA[infinite.index] / money.delta[infinite.index]
         list(serie.time, money.delta, equity, returns)
       }) %>%
+      extract(
+        i = EQUITY != 0
+      ) %>%
       setkey(TIME) %>%
       list %>%
       append(env.symbols.series, .) %>%
@@ -380,6 +384,7 @@ timeseries.symbols <- function(timeserie.tickets, money.tickets) {
 timeseries.account <- function(timeseries.symbols, money.tickets, margin.base=1500) {
   fun.env <- environment()
   symbols.profit_volume <- list()
+  symbols.return.serie <- list()
   symbol.names <- names(timeseries.symbols)
   account.table <- 0
   len <- length(timeseries.symbols)
@@ -397,6 +402,7 @@ timeseries.account <- function(timeseries.symbols, money.tickets, margin.base=15
                                                 .(BALANCE.DELTA = BALANCE.DELTA, NET.VOLUME = abs(NET.VOLUME), SUM.VOLUME = SUM.VOLUME)])
     fun.env$symbols.profit_volume %<>% append(list(symbol.serie[.(intersection.time),
                                                                 .(TIME = TIME, SYMBOL = symbol, BALANCE.DELTA = BALANCE.DELTA, NET.VOLUME = NET.VOLUME)]))
+    fun.env$symbols.return.serie %<>% append(list(symbol.serie[.(intersection.time), RETURN]))
   }, timeseries.symbols, symbol.names)
   symbols.profit_volume %<>%
     do.call(rbind, .) %>%
@@ -404,11 +410,18 @@ timeseries.account <- function(timeseries.symbols, money.tickets, margin.base=15
     extract(
       j = TIME := time.numeric.to.posixct(TIME)
     ) 
+  symbols.return.serie %<>%
+    do.call(cbind, .) %>%
+    as.data.table %>%
+    setnames(symbol.names) %>%
+    cbind(TIME = time.numeric.to.posixct(intersection.time), .)
   account.table %>%
     extract(j = c('TIME', 'MONEY', 'EQUITY', 'RETURN', 'MARGIN.USED', 'MARGIN.FREE') := {
       money.delta <- money.delta(money.tickets, intersection.time)
       equity <- BALANCE.DELTA + cumsum(money.delta)
       returns <- c(0, diff(BALANCE.DELTA) / equity[-length(equity)])
+      infinite.index <- which(is.infinite(returns))
+      returns[infinite.index] <- BALANCE.DELTA[infinite.index] / money.delta[infinite.index]
       margin.used <- NET.VOLUME * margin.base
       list(intersection.time, money.delta, equity, returns, margin.used, equity - margin.used)
     }) %>%
@@ -418,7 +431,8 @@ timeseries.account <- function(timeseries.symbols, money.tickets, margin.base=15
     setkey(TIME) %>%
     list(
       timeseries.symbols = .,
-      symbols.profit_volume = symbols.profit_volume
+      symbols.profit_volume = symbols.profit_volume,
+      symbols.return = symbols.return.serie
     )
 } # FINISH
 
@@ -467,8 +481,8 @@ tickets.extra.columns <- function(timeseries.one.ticket, ticket, otime, ctime, i
     period <- min(otime.shift + ctime.shift, ctime - otime)
     mfp <- NA_real_
     mfl <- NA_real_
-    mfpp <- NA_integer_
-    mflp <- NA_integer_
+    mfpp <- NA_real_
+    mflp <- NA_real_
   }
   data.table(TICKET = ticket, PERIOD = period, MFP = mfp, MFPP = mfpp, MFL = mfl, MFLP = mflp)
 }
