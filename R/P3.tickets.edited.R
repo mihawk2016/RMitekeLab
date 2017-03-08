@@ -493,36 +493,66 @@ tickets.money <- function(tickets.supported, set.init.money=NULL, include.middle
     tickets.supported %>%
     setkey(GROUP) %>%
     extract(!'MONEY', min(OTIME))
-  init.part <-
-    (if (!is.null(set.init.money)) {
+  
+  if (!is.null(set.init.money)) {
+    init.part <-
       data.table(
         TICKET = 0,
         OTIME = first.trade.time - 1,
         PROFIT = set.init.money
       ) %>%
-        build.tickets('MONEY')
+      build.tickets(., 'MONEY')[[1]]
+  } else {
+    tickets.money.raw <-
+      tickets.supported['MONEY'] %>%
+      extract(OTIME < first.trade.time, nomatch = 0)
+    if (nrow(tickets.money.raw)) {
+      init.part <- tickets.money.raw
     } else {
-      tickets.money.raw <-
-        tickets.supported['MONEY'] %>%
-        extract(OTIME < first.trade.time, nomatch = 0)
-      if (nrow(tickets.money.raw)) {
-        tickets.money.raw
-      } else {
+      init.part <-
         data.table(
           TICKET = 0,
           OTIME = first.trade.time - 1,
           PROFIT = default.money
-        ) %>%
-          build.tickets('MONEY')
-      }
-    })
+        ) %T>% print %>%
+        build.tickets(., 'MONEY') %>%
+        extract2(1)
+    }
+  }
+  # init.part <-
+  #   (if (!is.null(set.init.money)) {
+  #     data.table(
+  #       TICKET = 0,
+  #       OTIME = first.trade.time - 1,
+  #       PROFIT = set.init.money
+  #     ) %>%
+  #       build.tickets('MONEY')
+  #   } else {
+  #     tickets.money.raw <-
+  #       tickets.supported['MONEY'] %>%
+  #       extract(OTIME < first.trade.time, nomatch = 0)
+  #     if (nrow(tickets.money.raw)) {
+  #       tickets.money.raw
+  #     } else {
+  #       data.table(
+  #         TICKET = 0,
+  #         OTIME = first.trade.time - 1,
+  #         PROFIT = default.money
+  #       ) %>%
+  #         build.tickets('MONEY')
+  #     }
+  #   })
   if (include.middle) {
-    return(rbind(init.part, tickets.supported[GROUP == 'MONEY' & OTIME > first.trade.time, nomatch = 0], fill = TRUE))
+    middle.part <- tickets.supported[GROUP == 'MONEY' & OTIME > first.trade.time, nomatch = 0]
+    if (nrow(middle.part)) {
+      return(rbind(init.part, middle.part, use.names=TRUE, fill = TRUE))
+    }
   }
   init.part
 }
 
 money.delta <- function(tickets.money, time.vector) {
+  print(tickets.money)
   serie <- vector('numeric', length(time.vector))
   mapply(function(time, value) {
     serie[which(time.vector > time)[1]] <<- value
