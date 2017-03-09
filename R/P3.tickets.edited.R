@@ -552,7 +552,6 @@ tickets.money <- function(tickets.supported, set.init.money=NULL, include.middle
 }
 
 money.delta <- function(tickets.money, time.vector) {
-  print(tickets.money)
   serie <- vector('numeric', length(time.vector))
   mapply(function(time, value) {
     serie[which(time.vector > time)[1]] <<- value
