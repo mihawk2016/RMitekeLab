@@ -185,7 +185,7 @@ format.time.all.to.numeric <- function(time) {
 
 format.mt4trade.infos.time <- function(time) {
   # ''' format mt4trade info time '''
-  # 2016-08-16: Done
+  # 2016-08-16: Version 1.0
   os <- Sys.info()['sysname']
   if (os == 'Windows') {
     Sys.setlocale(locale = 'us')
