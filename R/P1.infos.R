@@ -186,10 +186,18 @@ format.time.all.to.numeric <- function(time) {
 format.mt4trade.infos.time <- function(time) {
   # ''' format mt4trade info time '''
   # 2016-08-16: Done
-  local_time <- Sys.getlocale('LC_TIME')
-  Sys.setlocale('LC_TIME', 'us')
-  new_time <- as.POSIXct(time, '%Y %b %d, %H:%M', tz = 'GMT')
-  Sys.setlocale('LC_TIME', local_time)
+  os <- Sys.info()['sysname']
+  if (os == 'Windows') {
+    Sys.setlocale(locale = 'us')
+    new_time <- as.POSIXct(time, '%Y %b %d, %H:%M', tz = 'GMT')
+    Sys.setlocale(locale = 'Chinese')
+  } else if (os == 'Linux') {
+    Sys.setlocale(locale = 'us_US.UTF-8')
+    new_time <- as.POSIXct(time, '%Y %b %d, %H:%M', tz = 'GMT')
+    Sys.setlocale(locale = 'zh_CN.UTF-8')
+  } else {
+    return(NULL)
+  }
   new_time
 } # FINISH
 
