@@ -262,7 +262,7 @@ tickets.statistics.continuous <- function(tickets.edited) {
     up.pl <- mapply(function(from, to) {
       sum(nprofit[from:to])
     }, from = continuous$UP.FROM, to = continuous$UP.TO)
-    con.table['PROFIT', (col.name) := list(max(up.n), round(mean(up.n), 2), round(max(up.pl), 2), round(mean(up.pl)), 2)]
+    con.table['PROFIT', (col.name) := list(max(up.n), round(mean(up.n), 2), round(max(up.pl), 2), round(mean(up.pl), 2))]
   }
   if (length(continuous$DN.FROM)) {
     dn.n <- with(continuous, DN.TO - DN.FROM) + 1
@@ -367,7 +367,7 @@ timeseries.symbols <- function(timeserie.tickets, money.tickets) {
         equity <- BALANCE.DELTA + cumsum(money.delta)
         returns <- c(0, diff(BALANCE.DELTA) / equity[-length(equity)])
         infinite.index <- which(is.infinite(returns))
-        returns[infinite.index] <- BALANCE.DELTA[infinite.index] / money.delta[infinite.index]
+        returns[infinite.index] <- BALANCE.DELTA[infinite.index] / as.numeric(money.delta[infinite.index])
         list(serie.time, money.delta, equity, returns)
       }) %>%
       extract(
@@ -421,7 +421,7 @@ timeseries.account <- function(timeseries.symbols, money.tickets, margin.base=15
       equity <- BALANCE.DELTA + cumsum(money.delta)
       returns <- c(0, diff(BALANCE.DELTA) / equity[-length(equity)])
       infinite.index <- which(is.infinite(returns))
-      returns[infinite.index] <- BALANCE.DELTA[infinite.index] / money.delta[infinite.index]
+      returns[infinite.index] <- BALANCE.DELTA[infinite.index] / as.numeric(money.delta[infinite.index])
       margin.used <- NET.VOLUME * margin.base
       list(intersection.time, money.delta, equity, returns, margin.used, equity - margin.used)
     }) %>%
@@ -514,7 +514,7 @@ tickets.money <- function(tickets.supported, set.init.money=NULL, include.middle
           TICKET = 0,
           OTIME = first.trade.time - 1,
           PROFIT = default.money
-        ) %T>% print %>%
+        ) %>%
         build.tickets(., 'MONEY') %>%
         extract2(1)
     }

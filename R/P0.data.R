@@ -11,7 +11,7 @@ compilePKGS(T)
 ## 2017-02-13: Version 0.1
 
 MYSQL.SETTING <- list(
-  HOST = '192.168.2.109',
+  HOST = '192.168.2.107',
   PORT = 3306,
   USERNAME = 'root',
   PASSWORD = '',

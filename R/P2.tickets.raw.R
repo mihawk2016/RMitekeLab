@@ -142,7 +142,7 @@ fetch.html.data.tickets.mt4ea <- function(mq.file, mq.file.parse, get.open.fun, 
                                  num.char.to.num, num.char.to.num, num.char.to.num, num.char.to.num, 'character')) %>%
     as.data.table %>%
     set_colnames(c('deal', 'time', 'type', 'ticket', 'volume', 'price', 'sl', 'tp', 'profit', 'balance')) %>%
-    extract(type != 'modify', -c('deal', 'balance'))
+    extract(type != 'modify', !c('deal', 'balance'), with = FALSE)
   mq.file.parse <- read_html(mq.file, encoding = 'GBK') #### just for parallel, fix later ####
   xml.text <-
     mq.file.parse %>%
